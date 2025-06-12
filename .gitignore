@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+*.ipynb
+
+# Data files
+*.csv
+*.npy
+*.pkl
+*.h5
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+rohdaten/*/*
+processed_data/*
+models/*
+visualizations/*
+
+# Keep directory structure
+!rohdaten/.gitkeep
+!processed_data/.gitkeep
+!models/.gitkeep
+!visualizations/.gitkeep
