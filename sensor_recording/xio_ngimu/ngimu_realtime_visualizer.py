@@ -12,7 +12,7 @@ import threading
 import time
 
 class NGIMURealTimeVisualizer:
-    def __init__(self, ip="0.0.0.0", port=9000, window_size=500):
+    def __init__(self, ip="0.0.0.0", port=8001, window_size=500): # Port von Laptop, das Sensordaten von IMU empfängt
         self.ip = ip
         self.port = port
         self.window_size = window_size

@@ -13,7 +13,7 @@ import queue
 import numpy as np
 
 class NGIMUReceiver:
-    def __init__(self, ip="0.0.0.0", port=9000):
+    def __init__(self, ip="0.0.0.0", port=8001):  # GEÄNDERT: Port 8001 statt 9000
         self.ip = ip
         self.port = port
         self.data_queue = queue.Queue()
@@ -107,6 +107,7 @@ class NGIMUReceiver:
         self.server_thread.daemon = True
         self.server_thread.start()
         print("OSC-Server läuft. Warte auf NGIMU-Daten...")
+        print(f"NGIMU sollte an 192.168.1.2:{self.port} senden")
     
     def stop_server(self):
         """Stoppt den OSC-Server"""
@@ -167,6 +168,7 @@ class NGIMUReceiver:
     def check_connection(self, timeout=5):
         """Überprüft ob NGIMU Daten sendet"""
         print(f"Überprüfe NGIMU-Verbindung für {timeout} Sekunden...")
+        print(f"Lausche auf Port {self.port}...")
         self.recording = True
         start_time = time.time()
         
@@ -182,6 +184,10 @@ class NGIMUReceiver:
         
         self.recording = False
         print("✗ Keine Daten von NGIMU empfangen!")
+        print("\nHINWEIS: Laut Ihrer Konfiguration sendet NGIMU an:")
+        print(f"  IP: 192.168.1.2")
+        print(f"  Port: 8001")
+        print("\nStellen Sie sicher, dass Sie mit dem NGIMU WiFi verbunden sind!")
         return False
     
     def interactive_recording_session(self):
@@ -198,10 +204,10 @@ class NGIMUReceiver:
         # Verbindung prüfen
         if not self.check_connection():
             print("\nBitte überprüfen Sie:")
-            print("1. NGIMU ist eingeschaltet")
-            print("2. WiFi/Ethernet ist konfiguriert")
-            print("3. OSC-Ausgabe ist aktiviert")
-            print("4. IP und Port stimmen überein")
+            print("1. Sie sind mit dem NGIMU WiFi verbunden (SSID: 'NGIMU - 0040874A')")
+            print("2. Ihre IP im NGIMU Netzwerk ist 192.168.1.2")
+            print("3. NGIMU sendet an Port 8001")
+            print("4. Send Rates sind aktiviert (sensors: 100Hz)")
             return
         
         while True:
@@ -238,15 +244,24 @@ class NGIMUReceiver:
 def main():
     """Hauptfunktion"""
     # NGIMU Receiver initialisieren
-    # Standard-Port für NGIMU ist 9000
-    receiver = NGIMUReceiver(ip="0.0.0.0", port=9000)
+    # Port 8001 basierend auf Ihrer Konfiguration
+    receiver = NGIMUReceiver(ip="0.0.0.0", port=8001)
     
     print("=== X-IO NGIMU Datenerfassung ===")
+    print("\nBasierend auf Ihrer NGIMU-Konfiguration:")
+    print("- NGIMU ist im AP-Modus (eigenes WiFi)")
+    print("- NGIMU IP: 192.168.1.1")
+    print("- Sendet an: 192.168.1.2:8001")
     print("\nBitte stellen Sie sicher, dass:")
-    print("1. NGIMU eingeschaltet ist")
-    print("2. Im gleichen Netzwerk wie dieser Computer")
-    print("3. OSC-Ausgabe in NGIMU GUI aktiviert ist")
-    print("4. Send Rates konfiguriert sind (Sensors: 100Hz)")
+    print("1. Sie mit dem NGIMU WiFi verbunden sind")
+    print("   SSID: 'NGIMU - 0040874A'")
+    print("2. Ihre IP-Adresse 192.168.1.2 ist")
+    print("3. Send Rates aktiviert sind (sensors: 100Hz)")
+    
+    # Frage ob Port geändert werden soll
+    custom_port = input("\nPort ändern? (Enter für 8001): ")
+    if custom_port:
+        receiver.port = int(custom_port)
     
     # Server starten
     receiver.start_server()
