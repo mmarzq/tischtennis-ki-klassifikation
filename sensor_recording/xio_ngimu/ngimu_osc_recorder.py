@@ -19,6 +19,7 @@ class NGIMUReceiver:
         self.data_queue = queue.Queue()
         self.recording = False
         self.current_data = {}
+        self.quaternion_data = {'quat_w': 0, 'quat_x': 0, 'quat_y': 0, 'quat_z': 0}
         
         # OSC Dispatcher einrichten
         self.dispatcher = dispatcher.Dispatcher()
@@ -52,7 +53,6 @@ class NGIMUReceiver:
             timestamp = args[0]
             gyro = args[1:4]
             acc = args[4:7]
-            mag = args[7:10]
             
             data_point = {
                 'timestamp': timestamp,
@@ -62,9 +62,11 @@ class NGIMUReceiver:
                 'acc_x': acc[0],
                 'acc_y': acc[1],
                 'acc_z': acc[2],
-                'mag_x': mag[0],
-                'mag_y': mag[1],
-                'mag_z': mag[2]
+                # Füge aktuelle Quaternion-Daten hinzu
+                'quat_w': self.quaternion_data['quat_w'],
+                'quat_x': self.quaternion_data['quat_x'],
+                'quat_y': self.quaternion_data['quat_y'],
+                'quat_z': self.quaternion_data['quat_z']
             }
             
             self.data_queue.put(('sensors', data_point))
@@ -72,11 +74,13 @@ class NGIMUReceiver:
     
     def handle_quaternion(self, address, *args):
         """Verarbeitet Quaternion-Daten für Orientierung"""
-        if len(args) >= 4:
-            self.current_data['quat_w'] = args[0]
-            self.current_data['quat_x'] = args[1]
-            self.current_data['quat_y'] = args[2]
-            self.current_data['quat_z'] = args[3]
+        if len(args) >= 5:  # timestamp + 4 quaternion values
+            # Aktualisiere die Quaternion-Daten
+            self.quaternion_data['quat_w'] = args[1]
+            self.quaternion_data['quat_x'] = args[2]
+            self.quaternion_data['quat_y'] = args[3]
+            self.quaternion_data['quat_z'] = args[4]
+            self.current_data.update(self.quaternion_data)
     
     def handle_linear(self, address, *args):
         """Verarbeitet lineare Beschleunigung (Gravitation entfernt)"""
@@ -129,6 +133,12 @@ class NGIMUReceiver:
         time.sleep(3)
         
         print(f"Aufnahme läuft für {duration} Sekunden...")
+        #print("3...")
+        #time.sleep(1)
+        print("2...")
+        time.sleep(1)  
+        print("1...")
+        time.sleep(1)
         print("Führen Sie jetzt die Schläge aus!")
         
         self.recording = True
@@ -149,14 +159,29 @@ class NGIMUReceiver:
         
         # Daten speichern
         if data_buffer:
-            headers = ['timestamp', 'acc_x', 'acc_y', 'acc_z', 
-                      'gyro_x', 'gyro_y', 'gyro_z', 
-                      'mag_x', 'mag_y', 'mag_z']
+            headers = ['Timestamp', 'Acc_X', 'Acc_Y', 'Acc_Z', 
+                      'Gyro_X', 'Gyro_Y', 'Gyro_Z', 
+                      'Quat_W', 'Quat_X', 'Quat_Y', 'Quat_Z']
             
             with open(filename, 'w', newline='') as file:
-                writer = csv.DictWriter(file, fieldnames=headers, extrasaction='ignore')
-                writer.writeheader()
-                writer.writerows(data_buffer)
+                writer = csv.writer(file)
+                writer.writerow(headers)
+                
+                for data in data_buffer:
+                    row = [
+                        data.get('timestamp', 0),
+                        data.get('acc_x', 0),
+                        data.get('acc_y', 0),
+                        data.get('acc_z', 0),
+                        data.get('gyro_x', 0),
+                        data.get('gyro_y', 0),
+                        data.get('gyro_z', 0),
+                        data.get('quat_w', 0),
+                        data.get('quat_x', 0),
+                        data.get('quat_y', 0),
+                        data.get('quat_z', 0)
+                    ]
+                    writer.writerow(row)
             
             print(f"\nAufnahme beendet. {len(data_buffer)} Datenpunkte gespeichert in:")
             print(f"{filename}")
@@ -187,7 +212,11 @@ class NGIMUReceiver:
         print("\nHINWEIS: Laut Ihrer Konfiguration sendet NGIMU an:")
         print(f"  IP: 192.168.1.2")
         print(f"  Port: 8001")
-        print("\nStellen Sie sicher, dass Sie mit dem NGIMU WiFi verbunden sind!")
+        print("\nStellen Sie sicher, dass:")
+        print("1. Sie mit dem NGIMU WiFi verbunden sind!")
+        print("2. NGIMU Send Rates aktiviert sind:")
+        print("   - Sensors: 100Hz")
+        print("   - Quaternion: 50-100Hz")
         return False
     
     def interactive_recording_session(self):
@@ -207,7 +236,9 @@ class NGIMUReceiver:
             print("1. Sie sind mit dem NGIMU WiFi verbunden (SSID: 'NGIMU - 0040874A')")
             print("2. Ihre IP im NGIMU Netzwerk ist 192.168.1.2")
             print("3. NGIMU sendet an Port 8001")
-            print("4. Send Rates sind aktiviert (sensors: 100Hz)")
+            print("4. Send Rates sind aktiviert:")
+            print("   - Sensors: 100Hz")
+            print("   - Quaternion: 50-100Hz")
             return
         
         while True:
@@ -229,6 +260,9 @@ class NGIMUReceiver:
                 stroke_type = stroke_types[choice]
                 output_folder = f"{base_folder}/{stroke_type}"
                 
+                # Ordner erstellen falls nicht vorhanden
+                #os.makedirs(output_folder, exist_ok=True)
+                
                 # Aufnahmedauer festlegen
                 duration = input("Aufnahmedauer in Sekunden (Standard: 30): ")
                 duration = int(duration) if duration else 30
@@ -236,17 +270,21 @@ class NGIMUReceiver:
                 # Aufnahme starten
                 self.record_strokes(stroke_type, output_folder, duration)
                 
-                # Nochmal aufnehmen?
-                again = input("\nNoch eine Aufnahme vom gleichen Typ? (j/n): ")
-                if again.lower() == 'j':
+                # Nochmal weiter aufnehmen?
+                while True:
+                    again = input("\nNoch eine Aufnahme vom gleichen Typ? (j/n): ")
+                    if again.lower() == 'n':
+                        break
                     self.record_strokes(stroke_type, output_folder, duration)
 
 def main():
     """Hauptfunktion"""
     # NGIMU Receiver initialisieren
     # Port 8001 basierend auf Ihrer Konfiguration
-    receiver = NGIMUReceiver(ip="0.0.0.0", port=8001)
-    
+    #receiver = NGIMUReceiver(ip="192.168.1.2", port=8002)
+    # 0.0.0.0 bedeutet, dass der Server auf allen verfügbaren Netzwerkinterfaces lauscht, einschließlich der IP 192.168.1.2.
+    receiver = NGIMUReceiver(ip="0.0.0.0", port=8001)  
+
     print("=== X-IO NGIMU Datenerfassung ===")
     print("\nBasierend auf Ihrer NGIMU-Konfiguration:")
     print("- NGIMU ist im AP-Modus (eigenes WiFi)")
@@ -256,7 +294,9 @@ def main():
     print("1. Sie mit dem NGIMU WiFi verbunden sind")
     print("   SSID: 'NGIMU - 0040874A'")
     print("2. Ihre IP-Adresse 192.168.1.2 ist")
-    print("3. Send Rates aktiviert sind (sensors: 100Hz)")
+    print("3. Send Rates aktiviert sind:")
+    print("   - Sensors: 100Hz")
+    print("   - Quaternion: 100Hz")
     
     # Frage ob Port geändert werden soll
     custom_port = input("\nPort ändern? (Enter für 8001): ")
