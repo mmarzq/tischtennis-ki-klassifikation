@@ -22,7 +22,7 @@ class TischtennisCNN:
         self.history = None
         
     def build_model(self):
-        """Erstellt die 1D CNN Architektur"""
+        """Erstellt die 1D CNN Architektur - angepasst für 10 Features"""
         self.model = models.Sequential([
             # Input Layer
             layers.Input(shape=self.input_shape),
@@ -175,8 +175,18 @@ def load_and_prepare_data():
     with open('processed_data/scaler.pkl', 'rb') as f:
         scaler = pickle.load(f)
     
+    # Feature-Namen laden (falls vorhanden)
+    try:
+        with open('processed_data/feature_names.pkl', 'rb') as f:
+            feature_names = pickle.load(f)
+            print(f"Geladene Features ({len(feature_names)}): {feature_names}")
+    except:
+        print("Feature-Namen nicht gefunden")
+    
     # Normalisierung
     n_samples, n_timesteps, n_features = X.shape
+    print(f"Datenform: {n_samples} Samples, {n_timesteps} Zeitschritte, {n_features} Features")
+    
     X_flat = X.reshape(-1, n_features)
     X_scaled = scaler.transform(X_flat)
     X_scaled = X_scaled.reshape(n_samples, n_timesteps, n_features)
@@ -190,7 +200,7 @@ def load_and_prepare_data():
         X_temp, y_temp, test_size=0.2, random_state=42, stratify=y_temp
     )
     
-    print(f"Datensätze:")
+    print(f"\nDatensätze:")
     print(f"Training: {X_train.shape[0]} Samples")
     print(f"Validation: {X_val.shape[0]} Samples")
     print(f"Test: {X_test.shape[0]} Samples")
@@ -202,6 +212,10 @@ def main():
     # Klassen definieren
     class_names = ['Vorhand Topspin', 'Vorhand Schupf', 
                    'Rückhand Topspin', 'Rückhand Schupf']
+    
+    # Ordner erstellen
+    os.makedirs('models', exist_ok=True)
+    os.makedirs('visualizations', exist_ok=True)
     
     # Daten laden
     X_train, X_val, X_test, y_train, y_val, y_test = load_and_prepare_data()
@@ -234,15 +248,24 @@ def main():
     model_info = {
         'input_shape': input_shape,
         'num_classes': 4,
+        'num_features': X_train.shape[2],
         'class_names': class_names,
         'test_accuracy': test_acc
     }
+    
+    # Feature-Namen hinzufügen falls vorhanden
+    try:
+        with open('processed_data/feature_names.pkl', 'rb') as f:
+            model_info['feature_names'] = pickle.load(f)
+    except:
+        pass
     
     with open('models/model_info.pkl', 'wb') as f:
         pickle.dump(model_info, f)
     
     print("\nTraining abgeschlossen!")
     print(f"Finale Test-Genauigkeit: {test_acc:.4f}")
+    print(f"Modell verwendet {X_train.shape[2]} Features")
 
 if __name__ == "__main__":
     main()

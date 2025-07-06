@@ -280,10 +280,3 @@ Das Vergleichstool ermöglicht:
 - [ ] Cloud-basiertes Training
 - [ ] Feedback-System für Spieler
 
-## 📧 Kontakt
-
-Bei Fragen zum Projekt wenden Sie sich an den Betreuer oder erstellen Sie ein Issue.
-
----
-
-**Viel Erfolg bei Ihrer Bachelorarbeit!** 🏓
