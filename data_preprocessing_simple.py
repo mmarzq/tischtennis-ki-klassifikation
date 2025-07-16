@@ -15,6 +15,7 @@ import numpy as np
 import os
 import glob
 import json
+import matplotlib.pyplot as plt 
 
 class MinimalTischtennisProcessor:
     def __init__(self, window_size=200):
@@ -41,11 +42,24 @@ class MinimalTischtennisProcessor:
         
         # Spaltennamen vereinheitlichen
         column_map = {
-            'Timestamp': 'timestamp', 'Acc_X': 'acc_x', 'Acc_Y': 'acc_y', 'Acc_Z': 'acc_z',
-            'Gyro_X': 'gyro_x', 'Gyro_Y': 'gyro_y', 'Gyro_Z': 'gyro_z',
-            'Mag_X': 'mag_x', 'Mag_Y': 'mag_y', 'Mag_Z': 'mag_z', 'Bar': 'bar',
-            'Quat_W': 'quat_w', 'Quat_X': 'quat_x', 'Quat_Y': 'quat_y', 'Quat_Z': 'quat_z',
-            'Lin_Acc_X': 'lin_acc_x', 'Lin_Acc_Y': 'lin_acc_y', 'Lin_Acc_Z': 'lin_acc_z'
+            'Timestamp': 'timestamp', 
+            'Acc_X': 'acc_x', 
+            'Acc_Y': 'acc_y', 
+            'Acc_Z': 'acc_z',
+            'Gyro_X': 'gyro_x', 
+            'Gyro_Y': 'gyro_y', 
+            'Gyro_Z': 'gyro_z',
+            'Mag_X': 'mag_x', 
+            'Mag_Y': 'mag_y', 
+            'Mag_Z': 'mag_z', 
+            'Bar': 'bar',
+            'Quat_W': 'quat_w', 
+            'Quat_X': 'quat_x', 
+            'Quat_Y': 'quat_y', 
+            'Quat_Z': 'quat_z',
+            'Lin_Acc_X': 'lin_acc_x', 
+            'Lin_Acc_Y': 'lin_acc_y', 
+            'Lin_Acc_Z': 'lin_acc_z'
         }
         
         df.rename(columns=column_map, inplace=True)
@@ -145,6 +159,10 @@ class MinimalTischtennisProcessor:
         
         all_windows = []
         
+        # Ordner für Visualisierungen erstellen
+        visual_processed_data_folder = os.path.join('processed_data', 'visual_processed', stroke_type)
+        os.makedirs(visual_processed_data_folder, exist_ok=True)
+        
         for file in files:
             data = self.load_csv_data(file)
             
@@ -160,9 +178,20 @@ class MinimalTischtennisProcessor:
             # Peaks finden
             peaks, intensity = self.find_movement_peaks(data)
             
+            # Visualisiere die Schlagerkennung
+            filename = os.path.basename(file)
+            visualization_path = os.path.join(visual_processed_data_folder, f"{filename}.png")
+            self.visualize_stroke_detection(data, peaks, intensity, visualization_path)
+            
             # Fenster extrahieren
             windows = self.extract_windows_around_peaks(data, peaks)
             all_windows.extend(windows)
+            
+            # Visualisiere jedes extrahierte Fenster
+            for i, window in enumerate(windows):
+                window_df = pd.DataFrame(window, columns=self.training_features)
+                window_name = os.path.join(visual_processed_data_folder, f"{filename}_window_{i}.png")
+                self.visualize_stroke_detection(window_df, output_file=window_name)
             
             print(f"  {os.path.basename(file)}: {len(windows)} Schläge erkannt")
         
@@ -207,12 +236,64 @@ class MinimalTischtennisProcessor:
         self.feature_means = np.array(params['means'])  # Liste zu NumPy Array
         self.feature_stds = np.array(params['stds'])
         return params['features']
+    
+    def visualize_stroke_detection(self, data, peaks=None, intensity=None, output_file=None):
+        """Visualisiert die Schlagerkennung"""
+        # Prüfe ob peaks und intensity vorhanden sind
+        show_stroke_detection = peaks is not None and intensity is not None
+        num_plots = 4 if show_stroke_detection else 3
+        
+        fig, axes = plt.subplots(num_plots, 1, figsize=(12, 12))
+        
+        # Gyroskop
+        axes[0].plot(data['gyro_x'], label='X', alpha=0.7)
+        axes[0].plot(data['gyro_y'], label='Y', alpha=0.7)
+        axes[0].plot(data['gyro_z'], label='Z', alpha=0.7)
+        axes[0].set_ylabel('Winkelgeschw. (°/s)')
+        axes[0].set_title('Gyroskop')
+        axes[0].legend()
+        axes[0].grid(True)
+        
+        # Lineare Beschleunigung
+        axes[1].plot(data['lin_acc_x'], label='X', alpha=0.7)
+        axes[1].plot(data['lin_acc_y'], label='Y', alpha=0.7)
+        axes[1].plot(data['lin_acc_z'], label='Z', alpha=0.7)
+        axes[1].set_ylabel('Lin. Beschl. (g)')
+        axes[1].set_title('Lineare Beschleunigung')
+        axes[1].legend()
+        axes[1].grid(True)
+        
+        # Quaternion
+        axes[2].plot(data['quat_w'], label='W', alpha=0.7)
+        axes[2].plot(data['quat_x'], label='X', alpha=0.7)
+        axes[2].plot(data['quat_y'], label='Y', alpha=0.7)
+        axes[2].plot(data['quat_z'], label='Z', alpha=0.7)
+        axes[2].set_ylabel('Quaternion')
+        axes[2].set_title('Orientierung (Quaternion)')
+        axes[2].legend()
+        axes[2].grid(True)
+        
+        # Bewegungsintensität mit erkannten Peaks
+        if show_stroke_detection:
+            axes[3].plot(intensity, label='Bewegungsintensität')
+            axes[3].plot(peaks, intensity[peaks], 'ro', markersize=8, label='Erkannte Schläge')
+            axes[3].set_ylabel('Intensität')
+            axes[3].set_xlabel('Samples')
+            axes[3].set_title('Schlagerkennung')
+            axes[3].legend()
+            axes[3].grid(True)
+        
+        plt.tight_layout()
+        
+        if output_file:
+            plt.savefig(output_file)
+            plt.close()  # Schließe Figure um Speicher zu sparen
 
 def process_all_data_minimal():
     """
     Hauptfunktion - verarbeitet alle Daten mit minimalen Bibliotheken
     """
-    processor = MinimalTischtennisProcessor(window_size=200)
+    processor = MinimalTischtennisProcessor(window_size=100) #modifiziert: Fenstergröße 200
     
     # Schlagtypen definieren
     stroke_types = ['vorhand_topspin', 'vorhand_schupf', 'rueckhand_topspin', 'rueckhand_schupf']

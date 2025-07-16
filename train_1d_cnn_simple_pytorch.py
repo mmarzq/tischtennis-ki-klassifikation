@@ -111,6 +111,7 @@ def main():
     test_loader = DataLoader(test_set, batch_size=32)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = Tischtennis1DCNN(input_channels=X.shape[1], num_classes=len(class_names), window_size=X.shape[2]).to(device)
+    #print("Windowsgröße:", X.shape[2])
     print("Starte Training für 50 Epochen...")
     train_model(model, train_loader, val_loader, device, epochs=50, lr=0.001)
     print("Evaluierung auf Testdaten...")

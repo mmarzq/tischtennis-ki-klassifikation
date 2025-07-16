@@ -213,7 +213,7 @@ class RealtimeWiFiPyTorchPredictor:
 
     def predict_stroke(self):
         confidence_threshold = 0.7
-        cooldown_time = 2.0
+        cooldown_time = 0.1         #modifiert: 2.0 Sekunde CPU Cooldown
         last_prediction_time = 0
         state = 'WAITING'
         movement_start_time = 0
@@ -241,12 +241,15 @@ class RealtimeWiFiPyTorchPredictor:
                 elif state == 'PREDICTING':
                     if current_time - last_prediction_time > cooldown_time:
                         try:
+                            t_pred_start = time.time()  # Startzeit der Vorhersage   
                             window_data = np.array(list(self.data_buffer))
                             window_scaled = (window_data - self.feature_means) / self.feature_stds
                             X = torch.tensor(window_scaled.T, dtype=torch.float32).unsqueeze(0).to(self.device)
                             with torch.no_grad():
                                 logits = self.model(X)
                                 probs = torch.softmax(logits, dim=1).cpu().numpy()[0]
+                            t_pred_end = time.time()    # Endzeit der Vorhersage
+                            pred_time = (t_pred_end - t_pred_start) * 1000  # ms
                             predicted_class = np.argmax(probs)
                             confidence = probs[predicted_class]
                             if confidence > confidence_threshold:
@@ -256,8 +259,10 @@ class RealtimeWiFiPyTorchPredictor:
                                     'timestamp': current_time,
                                     'all_probs': probs,
                                     'movement_score': peak_movement_score,
-                                    'lin_acc_mean': lin_acc_mean
+                                    'lin_acc_mean': lin_acc_mean,
+                                    'prediction_time_ms': pred_time     # Vorhersagezeit in ms
                                 }
+                                print(f"[DEBUG] Vorhersagezeit: {pred_time:.2f} ms")    # Debug-Ausgabe
                                 self.prediction_queue.put(result)
                                 last_prediction_time = current_time
                         except Exception as e:
@@ -306,12 +311,13 @@ class RealtimeWiFiPyTorchPredictor:
                     print(f"   Konfidenz: {result['confidence']:.1%}")
                     print(f"   Bewegungsintensität: {result['movement_score']:.2f}")
                     print(f"   Durchschn. Lin. Beschleunigung: {result['lin_acc_mean']:.1f} g")
+                    print(f"   Vorhersagezeit: {result.get('prediction_time_ms', 0):.2f} ms")
                     print(f"\n   Wahrscheinlichkeiten:")
                     for i, (name, prob) in enumerate(zip(self.class_names, result['all_probs'])):
                         bar = '█' * int(prob * 20)
                         print(f"   {name:20} {bar:20} {prob:.1%}")
                     print(f"{'='*60}\n")
-                if current_time - last_status_time > 3:
+                if current_time - last_status_time > 1:  #modifiert von> 3 Sekunden Status-Update
                     if len(self.movement_history) > 0:
                         recent = list(self.movement_history)[-10:]
                         current_lin_acc = np.mean([d['lin_acc_mag'] for d in recent])
