@@ -1,147 +1,111 @@
-# X-IO NGIMU Integration
+# XIO NGIMU Sensor Recording
 
-Dieses Verzeichnis enthält alle Skripte zur Datenerfassung mit dem X-IO NGIMU Sensor.
+Dieses Verzeichnis enthält Skripte zur Aufnahme und Visualisierung von Sensordaten des x-io NGIMU (Next Generation Inertial Measurement Unit) für die Tischtennisschlag-Klassifikation.
 
-## 📋 Übersicht der Skripte
+## Überblick
 
-### 1. `ngimu_osc_recorder.py`
-**Echtzeit-Datenerfassung über WiFi/Ethernet**
-- Empfängt Sensordaten über OSC-Protokoll
-- Interaktive Aufnahmesession für verschiedene Schlagtypen
-- Automatische Speicherung im einheitlichen CSV-Format
+Das x-io NGIMU ist ein drahtloses 9-DOF IMU-System, das über WiFi kommuniziert und OSC (Open Sound Control) Nachrichten sendet. Die Skripte in diesem Verzeichnis ermöglichen:
 
-### 2. `ngimu_configurator.py`
-**Sensor-Konfiguration über OSC**
-- Optimierte Einstellungen für Tischtennis
-- Kalibrierung und Reset-Funktionen
-- Anpassung der Datenraten
+- Aufnahme von Sensordaten (Gyroskop, Beschleunigung, Magnetometer, Quaternion, Lineare Beschleunigung)
+- Echtzeit-Visualisierung der Sensordaten
+- Speicherung der Daten im CSV-Format für weitere Analysen
 
-### 3. `ngimu_csv_converter.py`
-**Konvertierung von NGIMU GUI Exporten**
-- Wandelt NGIMU CSV-Format in einheitliches Format um
-- Batch-Konvertierung ganzer Ordner
-- Analyse-Funktionen für CSV-Dateien
+## Dateien
 
-### 4. `ngimu_realtime_visualizer.py`
-**Live-Visualisierung der Sensordaten**
-- Echtzeit-Plots für alle Sensoren
-- Bewegungsintensität und Schlagerkennung
-- Visuelles Feedback während der Aufnahme
+### 1. `xio_ngimu_recorder.py`
+Hauptskript zur Aufnahme von Sensordaten.
 
-## 🚀 Schnellstart
+**Funktionen:**
+- Verbindet sich über UDP mit dem NGIMU (Standard IP: 192.168.1.1)
+- Empfängt Daten auf mehreren Ports (8001, 8010, 8011, 8012)
+- Speichert folgende Sensordaten:
+  - Gyroskop (X, Y, Z) in °/s
+  - Beschleunigung (X, Y, Z) in g
+  - Magnetometer (X, Y, Z)
+  - Barometer in hPa
+  - Quaternion (W, X, Y, Z)
+  - Lineare Beschleunigung (X, Y, Z) in g (ohne Gravitation)
+- Interaktives Menü für verschiedene Schlagtypen
+- Automatische Dateinamensvergabe mit Zeitstempel
 
-### Voraussetzungen
-
-1. **NGIMU einschalten** und mit dem Netzwerk verbinden
-2. **Python-Abhängigkeiten** installieren:
-   ```bash
-   pip install python-osc
-   ```
-
-### NGIMU Konfiguration
-
-1. **NGIMU GUI** öffnen
-2. **WiFi-Einstellungen**:
-   - Mode: Client oder Access Point
-   - IP-Adresse notieren (z.B. 192.168.1.100)
-3. **Send Rates** einstellen:
-   - /rate/sensors: 100
-   - /rate/quaternion: 100
-   - /rate/linear: 100
-4. **OSC aktivieren**:
-   - Destination IP: Ihr Computer
-   - Port: 9000
-
-### Datenerfassung starten
-
+**Verwendung:**
 ```bash
-cd sensor_recording/xio_ngimu
-python ngimu_osc_recorder.py
+python xio_ngimu_recorder.py
 ```
 
-## 📊 Workflow-Beispiel
+### 2. `ngimu_realtime_visualizer.py`
+Echtzeit-Visualisierung der Sensordaten mit matplotlib.
 
-### 1. Sensor konfigurieren
-```bash
-python ngimu_configurator.py
-# IP eingeben, dann Option 1 für Tischtennis-Optimierung
-```
+**Funktionen:**
+- Zeigt 4 Diagramme in Echtzeit:
+  1. Rohe Beschleunigung (3 Achsen)
+  2. Gyroskop (3 Achsen)
+  3. Lineare Beschleunigung (3 Achsen, ohne Gravitation)
+  4. Bewegungsintensität
+- Visuelle Schlag-Erkennung (rötlicher Hintergrund bei hoher Intensität)
+- Automatische Skalierung der Zeitachse
 
-### 2. Verbindung testen
+**Verwendung:**
 ```bash
 python ngimu_realtime_visualizer.py
-# Sensor bewegen und Live-Daten prüfen
 ```
 
-### 3. Daten aufnehmen
-```bash
-python ngimu_osc_recorder.py
-# Schlagtyp wählen und Aufnahme starten
-```
+### 3. `osc_decoder.py`
+OSC-Decoder vom Hersteller x-io Technologies.
 
-### 4. GUI-Daten konvertieren (optional)
-```bash
-python ngimu_csv_converter.py
-# Falls Sie Daten über NGIMU GUI aufgenommen haben
-```
+**Funktionen:**
+- Dekodiert OSC-Nachrichten vom NGIMU
+- Unterstützt verschiedene Datentypen (float, int, string, bool)
+- Verarbeitet OSC-Bundles und einzelne Nachrichten
 
-## 🔧 Tipps & Tricks
+## Installation
 
-### Optimale NGIMU-Einstellungen
+### Voraussetzungen
+- Python 3.7+
+- Erforderliche Pakete:
+  ```bash
+  pip install matplotlib numpy
+  ```
 
-**Für beste Ergebnisse:**
-- Sensors Rate: 100 Hz
-- Quaternion Rate: 100 Hz  
-- Linear Rate: 100 Hz (optional)
-- Euler Rate: 0 Hz (nicht benötigt)
-- Andere Sensoren: 0 Hz (deaktiviert)
+### NGIMU Konfiguration
+1. NGIMU über WiFi verbinden (Standard SSID: NGIMU)
+2. IP-Adresse: 192.168.1.1
+3. Send Port: 9000
+4. Receive Ports: 8001, 8010, 8011, 8012
 
-### Netzwerk-Troubleshooting
+## Datenformat
 
-**Wenn keine Daten ankommen:**
-1. Firewall-Einstellungen prüfen (Port 9000)
-2. Ping zum NGIMU: `ping 192.168.1.100`
-3. In NGIMU GUI: Tools → Network Announce
-4. Richtiges Subnetz? (Computer und NGIMU im gleichen Netzwerk)
+Die CSV-Dateien enthalten folgende Spalten:
+- `Timestamp`: Zeit seit Aufnahmestart in Sekunden
+- `Gyro_X`, `Gyro_Y`, `Gyro_Z`: Winkelgeschwindigkeit in °/s
+- `Acc_X`, `Acc_Y`, `Acc_Z`: Beschleunigung in g
+- `Mag_X`, `Mag_Y`, `Mag_Z`: Magnetfeld
+- `Bar`: Luftdruck in hPa
+- `Quat_W`, `Quat_X`, `Quat_Y`, `Quat_Z`: Orientierung als Quaternion
+- `Lin_Acc_X`, `Lin_Acc_Y`, `Lin_Acc_Z`: Lineare Beschleunigung in g (ohne Gravitation)
 
-### Batterie-Management
+## Schlagtypen
 
-- Vollständig laden vor längeren Sessions
-- Batterie-Status über GUI oder `/battery` OSC-Befehl
-- Bei niedrigem Stand: Datenqualität kann leiden
+Die Aufnahme unterstützt 4 Tischtennisschlag-Typen:
+1. Vorhand Topspin
+2. Vorhand Schupf
+3. Rückhand Topspin
+4. Rückhand Schupf
 
-## 📈 Datenformat
+## Tipps zur Verwendung
 
-### OSC-Nachrichten vom NGIMU
+1. **Stabile Verbindung**: Stellen Sie sicher, dass die WiFi-Verbindung zum NGIMU stabil ist
+2. **Aufnahmequalität**: Das System erreicht typischerweise 100-400 Hz Abtastrate
+3. **Synchronisation**: Die Skripte warten auf vollständige Datensätze (Sensoren + Quaternion + Lineare Beschleunigung) bevor sie speichern
+4. **Visualisierung**: Nutzen Sie den Visualizer zur Überprüfung der Datenqualität in Echtzeit
 
-| Adresse | Daten | Einheit | Rate |
-|---------|-------|---------|------|
-| /sensors | timestamp, gyroX/Y/Z, accX/Y/Z, magX/Y/Z | °/s, g, µT | 100 Hz |
-| /quaternion | w, x, y, z | - | 100 Hz |
-| /linear | x, y, z | g | 100 Hz |
-| /euler | roll, pitch, yaw | ° | Optional |
+## Troubleshooting
 
-### Konvertiertes CSV-Format
+- **Keine Daten empfangen**: Überprüfen Sie die WiFi-Verbindung und IP-Adresse
+- **Niedrige Datenrate**: Stellen Sie sicher, dass alle Ports (8001-8012) nicht blockiert sind
+- **Fehlende Daten**: Der NGIMU muss konfiguriert sein, um alle Datentypen zu senden
 
-```csv
-timestamp,acc_x,acc_y,acc_z,gyro_x,gyro_y,gyro_z
-1234,0.12,-0.03,0.98,1.2,-0.5,0.1
-```
+## Lizenz
 
-## 🆚 Vergleich Arduino vs NGIMU
-
-| Feature | Arduino Nicla | X-IO NGIMU |
-|---------|---------------|------------|
-| Verbindung | USB/Bluetooth | WiFi/USB |
-| Max. Rate | ~200 Hz | 400 Hz |
-| Sensoren | BMI270 + BMM150 | Invensense MPU9250 |
-| Echtzeit | Mittel | Sehr gut |
-| Preis | ~80€ | ~380£ |
-| Setup | Einfach | Komplex |
-
-## 📞 Support
-
-Bei Problemen:
-1. NGIMU User Manual konsultieren
-2. [X-IO Forum](https://x-io.co.uk/community/)
-3. Logs in NGIMU GUI prüfen
+Der `osc_decoder.py` ist Copyright © x-io Technologies Limited.
+Die anderen Skripte sind Teil des Tischtennisschlag-Klassifikationsprojekts.

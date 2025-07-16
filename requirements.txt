@@ -6,11 +6,11 @@ seaborn>=0.12.2
 scipy>=1.11.1
 
 # Machine Learning
-scikit-learn>=1.4.0     # scikit-learn==1.3.0 Scikit-learn 1.3.0 muss beim Installieren kompiliert werden und benötigt dafür einen C++ Compiler.
-tensorflow>=2.16.0,<2.19.0
+scikit-learn>=1.4.0             # scikit-learn==1.3.0 Scikit-learn 1.3.0 muss beim Installieren kompiliert werden und benötigt dafür einen C++ Compiler.
+tensorflow>=2.16.0,<2.19.0      # tensorflow unterstützt im Moment nur python 3.8 und 3.12
 
 # Data processing
-pyserial==3.5  # For Arduino serial communication
+pyserial==3.5                   # For Arduino serial communication
 
 # Optional for advanced features
 jupyter==1.0.0
@@ -18,3 +18,6 @@ plotly==5.15.0
 
 # For NGIMU communication
 python-osc==1.8.3
+
+# for other python   
+conda install numpy scipy pandas matplotlib seaborn scikit-learn tensorflow

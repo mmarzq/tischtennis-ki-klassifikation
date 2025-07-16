@@ -1,0 +1,177 @@
+# -*- coding: utf-8 -*-
+"""
+Sensor Data Visualization Script
+Plots sensor data from CSV files including Gyro, Acc, Mag, Bar, Quat, and Lin_Acc
+"""
+
+import os
+import pandas as pd
+import numpy as np
+from matplotlib import pyplot as plt
+
+def plot_csv_files():
+    # Set up folder paths
+    base_folder = "../../rohdaten"
+    stroke_types = {
+        '1': 'vorhand_topspin',
+        '2': 'vorhand_schupf',
+        '3': 'rueckhand_topspin',
+        '4': 'rueckhand_schupf'
+    }
+    
+    print("\n=== XIO NGIMU Tischtennisschlag Aufnahme ===")
+    print("1: Vorhand Topspin")
+    print("2: Vorhand Schupf")
+    print("3: Rückhand Topspin")
+    print("4: Rückhand Schupf")
+    print("q: Beenden")
+    
+    choice = input("\nWählen Sie eine Option: ")
+    stroke_type = stroke_types[choice]
+
+    input_folder = f"{base_folder}/{stroke_type}"  # Change this to your input folder path
+    output_folder = f"{base_folder}/{stroke_type}_plots"   # Change this to your output folder path
+    
+    # Create output folder if it doesn't exist
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+        print(f"Created output folder: {output_folder}")
+    
+    # Check if input folder exists
+    if not os.path.exists(input_folder):
+        print(f"Input folder {input_folder} does not exist!")
+        return
+    
+    # Get all files in the input folder
+    all_files = os.listdir(input_folder)
+    
+    # Filter only CSV files
+    csv_files = []
+    for file in all_files:
+        if file.lower().endswith('.csv'):
+            csv_files.append(file)
+    
+    if not csv_files:
+        print(f"No CSV files found in {input_folder}")
+        return
+    
+    print(f"Found {len(csv_files)} CSV files to process")
+    
+    # Process each CSV file
+    for csv_filename in csv_files:
+        try:
+            # Create full path to the CSV file
+            csv_path = os.path.join(input_folder, csv_filename)
+            
+            # Get the filename without extension for the plot title
+            filename_no_ext = csv_filename.replace('.csv', '')
+            
+            print(f"Processing: {csv_filename}")
+            
+            # Read the CSV file
+            df = pd.read_csv(csv_path)
+            
+            # Create a figure with 6 subplots (added one for magnetometer)
+            fig, axes = plt.subplots(6, 1, figsize=(15, 12))
+            fig.suptitle(f'Sensor Data: {filename_no_ext}', fontsize=16)
+            
+            # Plot 1: Gyroscope data (X, Y, Z)
+            axes[0].plot(df['Timestamp'], df['Gyro_X'], label='Gyro_X', color='red')
+            axes[0].plot(df['Timestamp'], df['Gyro_Y'], label='Gyro_Y', color='green')
+            axes[0].plot(df['Timestamp'], df['Gyro_Z'], label='Gyro_Z', color='blue')
+            axes[0].set_title('Gyroscope Data')
+            axes[0].set_xlabel('Timestamp (s)')
+            axes[0].set_ylabel('Angular Velocity (rad/s)')
+            axes[0].legend()
+            axes[0].grid(True)
+            
+            # Plot 2: Accelerometer data (X, Y, Z)
+            axes[1].plot(df['Timestamp'], df['Acc_X'], label='Acc_X', color='red')
+            axes[1].plot(df['Timestamp'], df['Acc_Y'], label='Acc_Y', color='green')
+            axes[1].plot(df['Timestamp'], df['Acc_Z'], label='Acc_Z', color='blue')
+            axes[1].set_title('Accelerometer Data')
+            axes[1].set_xlabel('Timestamp (s)')
+            axes[1].set_ylabel('Acceleration (g)')
+            axes[1].legend()
+            axes[1].grid(True)
+            
+            # Plot 3: Magnetometer data (X, Y, Z)
+            axes[2].plot(df['Timestamp'], df['Mag_X'], label='Mag_X', color='red')
+            axes[2].plot(df['Timestamp'], df['Mag_Y'], label='Mag_Y', color='green')
+            axes[2].plot(df['Timestamp'], df['Mag_Z'], label='Mag_Z', color='blue')
+            axes[2].set_title('Magnetometer Data')
+            axes[2].set_xlabel('Timestamp (s)')
+            axes[2].set_ylabel('Magnetic Field (μT)')
+            axes[2].legend()
+            axes[2].grid(True)
+            
+            # Plot 4: Quaternion data (W, X, Y, Z)
+            axes[3].plot(df['Timestamp'], df['Quat_W'], label='Quat_W', color='purple')
+            axes[3].plot(df['Timestamp'], df['Quat_X'], label='Quat_X', color='orange')
+            axes[3].plot(df['Timestamp'], df['Quat_Y'], label='Quat_Y', color='cyan')
+            axes[3].plot(df['Timestamp'], df['Quat_Z'], label='Quat_Z', color='magenta')
+            axes[3].set_title('Quaternion Data')
+            axes[3].set_xlabel('Timestamp (s)')
+            axes[3].set_ylabel('Quaternion Value')
+            axes[3].legend()
+            axes[3].grid(True)
+            
+            # Plot 5: Linear Acceleration and Barometer
+            # Create twin y-axis for barometer
+            ax5_left = axes[4]
+            ax5_right = ax5_left.twinx()
+            
+            # Plot linear acceleration on left y-axis
+            ax5_left.plot(df['Timestamp'], df['Lin_Acc_X'], label='Lin_Acc_X', color='red', alpha=0.7)
+            ax5_left.plot(df['Timestamp'], df['Lin_Acc_Y'], label='Lin_Acc_Y', color='green', alpha=0.7)
+            ax5_left.plot(df['Timestamp'], df['Lin_Acc_Z'], label='Lin_Acc_Z', color='blue', alpha=0.7)
+            ax5_left.set_xlabel('Timestamp (s)')
+            ax5_left.set_ylabel('Linear Acceleration (m/s²)', color='black')
+            ax5_left.legend(loc='upper left')
+            ax5_left.grid(True)
+            
+            # Plot barometer on right y-axis
+            ax5_right.plot(df['Timestamp'], df['Bar'], label='Barometer', color='purple', linewidth=2)
+            ax5_right.set_ylabel('Pressure (hPa)', color='purple')
+            ax5_right.legend(loc='upper right')
+            
+            axes[4].set_title('Linear Acceleration & Barometer Data')
+            
+            # Plot 6: Total magnitudes
+            axes[5].set_title('Total Magnitudes')
+            
+            # Calculate total accelerometer magnitude
+            total_acc = np.sqrt(df['Acc_X']**2 + df['Acc_Y']**2 + df['Acc_Z']**2)
+            # Calculate total gyroscope magnitude
+            total_gyro = np.sqrt(df['Gyro_X']**2 + df['Gyro_Y']**2 + df['Gyro_Z']**2)
+            # Calculate total magnetometer magnitude
+            total_mag = np.sqrt(df['Mag_X']**2 + df['Mag_Y']**2 + df['Mag_Z']**2)
+            
+            axes[5].plot(df['Timestamp'], total_acc, label='|Acc|', color='orange', alpha=0.8, linewidth=1.5)
+            axes[5].plot(df['Timestamp'], total_gyro, label='|Gyro|', color='cyan', alpha=0.8, linewidth=1.5)
+            axes[5].plot(df['Timestamp'], total_mag/50, label='|Mag|/50', color='magenta', alpha=0.8, linewidth=1.5)
+            axes[5].set_xlabel('Timestamp (s)')
+            axes[5].set_ylabel('Magnitude')
+            axes[5].legend()
+            axes[5].grid(True, alpha=0.3)
+            
+            # Adjust layout to prevent overlapping
+            plt.tight_layout()
+            
+            # Save the plot
+            output_filename = f"{filename_no_ext}_plot.png"
+            output_path = os.path.join(output_folder, output_filename)
+            plt.savefig(output_path, dpi=300, bbox_inches='tight')
+            plt.close()  # Close the figure to free memory
+            
+            print(f"Saved plot: {output_filename}")
+            
+        except Exception as e:
+            print(f"Error processing {csv_filename}: {e}")
+            continue
+    
+    print(f"\nAll plots saved to: {output_folder}")
+
+# Run the function
+if __name__ == "__main__":
+    plot_csv_files()
