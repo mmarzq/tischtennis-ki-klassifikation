@@ -1,19 +1,20 @@
 """
 MINIMALE Datenvorverarbeitung für Tischtennisschlag-Klassifikation
-Nur mit pandas, numpy und pickle (Python Standard-Bibliotheken)
-Keine scipy, sklearn, matplotlib - NUR das Nötigste!
+Mit JSON statt Pickle für bessere Lesbarkeit und Sicherheit
+Nur mit pandas, numpy und json (Python Standard-Bibliotheken)
 
 Simpler gemacht:
-    - Butterworth-Filter → simple_smooth() (einfacher gleitender Durchschnitt) --> Etwas weniger präzise bei der Filterung 
+    - Butterworth-Filter → simple_smooth() (einfacher gleitender Durchschnitt)
     - scipy.find_peaks → find_movement_peaks() (eigene Peak-Erkennung)
-    - sklearn.StandardScaler → simple_normalize() (manuelle Z-Score Normalisierung) 
+    - sklearn.StandardScaler → simple_normalize() (manuelle Z-Score Normalisierung)
+    - pickle → JSON für alle Metadaten (NumPy Arrays bleiben als .npy)
 """
 
 import pandas as pd
 import numpy as np
 import os
 import glob
-import pickle
+import json
 
 class MinimalTischtennisProcessor:
     def __init__(self, window_size=200):
@@ -189,21 +190,22 @@ class MinimalTischtennisProcessor:
         return X_normalized
     
     def save_normalization_params(self, filename):
-        """Speichert Normalisierungsparameter"""
+        """Speichert Normalisierungsparameter als JSON"""
         params = {
-            'means': self.feature_means,
-            'stds': self.feature_stds,
+            'means': self.feature_means.tolist(),  # NumPy Array zu Liste
+            'stds': self.feature_stds.tolist(),
             'features': self.training_features
         }
-        with open(filename, 'wb') as f:
-            pickle.dump(params, f)
+        with open(filename, 'w') as f:
+            json.dump(params, f, indent=2)  # indent für bessere Lesbarkeit
+        print(f"Normalisierungsparameter gespeichert in {filename}")
     
     def load_normalization_params(self, filename):
-        """Lädt Normalisierungsparameter"""
-        with open(filename, 'rb') as f:
-            params = pickle.load(f)
-        self.feature_means = params['means']
-        self.feature_stds = params['stds']
+        """Lädt Normalisierungsparameter aus JSON"""
+        with open(filename, 'r') as f:
+            params = json.load(f)
+        self.feature_means = np.array(params['means'])  # Liste zu NumPy Array
+        self.feature_stds = np.array(params['stds'])
         return params['features']
 
 def process_all_data_minimal():
@@ -248,28 +250,49 @@ def process_all_data_minimal():
     output_dir = './processed_data'
     os.makedirs(output_dir, exist_ok=True)
     
-    # Speichern
+    # NumPy Arrays speichern (bleiben als .npy für Effizienz)
     np.save(f'{output_dir}/X_minimal.npy', X_normalized)
     np.save(f'{output_dir}/y_minimal.npy', y)
     
-    # Normalisierungsparameter speichern
-    processor.save_normalization_params(f'{output_dir}/normalization_minimal.pkl')
+    # Normalisierungsparameter als JSON speichern
+    processor.save_normalization_params(f'{output_dir}/normalization_minimal.json')
     
-    # Zusätzliche Info speichern
+    # Zusätzliche Info als JSON speichern
     info = {
         'stroke_types': stroke_types,
         'window_size': processor.window_size,
         'features': processor.training_features,
-        'data_shape': X.shape
+        'data_shape': list(X.shape),  # Tuple zu Liste für JSON
+        'num_samples': int(X.shape[0]),
+        'num_features': int(X.shape[2]),
+        'processing_date': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
     }
-    with open(f'{output_dir}/info_minimal.pkl', 'wb') as f:
-        pickle.dump(info, f)
+    
+    with open(f'{output_dir}/info_minimal.json', 'w') as f:
+        json.dump(info, f, indent=2)
+    
+    # Zusammenfassung der Klassen als JSON
+    unique_labels, counts = np.unique(y, return_counts=True)
+    class_distribution = {
+        stroke_types[int(label)]: int(count) 
+        for label, count in zip(unique_labels, counts)
+    }
+    
+    summary = {
+        'total_samples': int(len(X)),
+        'class_distribution': class_distribution,
+        'balanced': bool(np.std(counts) < np.mean(counts) * 0.2)  # Prüft ob Klassen ausbalanciert sind
+    }
+    
+    with open(f'{output_dir}/data_summary.json', 'w') as f:
+        json.dump(summary, f, indent=2)
     
     print(f"\nDaten gespeichert in {output_dir}/")
     print("- X_minimal.npy (normalisierte Sensordaten)")
     print("- y_minimal.npy (Labels)")
-    print("- normalization_minimal.pkl (Normalisierungsparameter)")
-    print("- info_minimal.pkl (Zusätzliche Informationen)")
+    print("- normalization_minimal.json (Normalisierungsparameter für Features)")
+    print("- info_minimal.json (Zusätzliche Informationen über die Daten)")
+    print("- data_summary.json (Zusammenfassung der Daten und Klassenverteilung)")
     
     return X_normalized, y
 
@@ -280,26 +303,31 @@ def check_processed_data():
         X = np.load('./processed_data/X_minimal.npy')
         y = np.load('./processed_data/y_minimal.npy')
         
-        with open('./processed_data/info_minimal.pkl', 'rb') as f:
-            info = pickle.load(f)
+        # JSON Dateien laden
+        with open('./processed_data/info_minimal.json', 'r') as f:
+            info = json.load(f)
+        
+        with open('./processed_data/data_summary.json', 'r') as f:
+            summary = json.load(f)
         
         print("Verarbeitete Daten geladen:")
         print(f"X Form: {X.shape}")
         print(f"y Form: {y.shape}")
         print(f"Schlagtypen: {info['stroke_types']}")
         print(f"Features: {info['features']}")
+        print(f"\nKlassenverteilung:")
+        for stroke_type, count in summary['class_distribution'].items():
+            print(f"  {stroke_type}: {count} Schläge")
+        print(f"\nDaten ausbalanciert: {'Ja' if summary['balanced'] else 'Nein'}")
         
-        # Anzahl pro Klasse
-        unique_labels, counts = np.unique(y, return_counts=True)
-        for label, count in zip(unique_labels, counts):
-            print(f"Klasse {label} ({info['stroke_types'][label]}): {count} Schläge")
-        
-    except FileNotFoundError:
+    except FileNotFoundError as e:
+        print(f"Datei nicht gefunden: {e}")
         print("Noch keine verarbeiteten Daten gefunden. Führen Sie zuerst process_all_data_minimal() aus.")
 
 if __name__ == "__main__":
-    print("=== MINIMALE DATENVERARBEITUNG ===")
-    print("Verwendet nur: pandas, numpy, pickle")
+    print("=== MINIMALE DATENVERARBEITUNG MIT JSON ===")
+    print("Verwendet: pandas, numpy, json")
+    print("JSON-Dateien sind lesbar und sicher!")
     print()
     
     # Alle Daten verarbeiten
@@ -308,6 +336,7 @@ if __name__ == "__main__":
     if X is not None:
         print("\n=== ERFOLGREICH VERARBEITET ===")
         print("Die Daten sind jetzt bereit für das Training!")
+        print("Öffnen Sie die JSON-Dateien mit einem Texteditor um die Metadaten zu sehen.")
     else:
         print("\n=== FEHLER ===")
         print("Keine Daten konnten verarbeitet werden.")

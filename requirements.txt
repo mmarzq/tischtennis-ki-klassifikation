@@ -8,8 +8,8 @@ scipy>=1.11.1
 # Machine Learning
 scikit-learn>=1.4.0             # scikit-learn==1.3.0 Scikit-learn 1.3.0 muss beim Installieren kompiliert werden und benötigt dafür einen C++ Compiler.
 tensorflow>=2.16.0,<2.19.0      # tensorflow unterstützt im Moment nur python 3.8 und 3.12
+torch
 
-# Data processing
 pyserial==3.5                   # For Arduino serial communication
 
 # Optional for advanced features

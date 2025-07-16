@@ -1,6 +1,7 @@
 """
 1D CNN Modell für Tischtennisschlag-Klassifikation
-Nur mit NumPy und Matplotlib implementiert
+Mit JSON statt Pickle für bessere Lesbarkeit
+Nur mit NumPy, Matplotlib und JSON implementiert
 
 Eigene Implementierungen erstellt:
     - Conv1DLayer: 1D Convolution von Hand programmiert
@@ -16,8 +17,9 @@ Eigene Hilfsfunktionen:
 
 import numpy as np
 import matplotlib.pyplot as plt
-import pickle
+import json
 import os
+from datetime import datetime
 
 class ActivationFunctions:
     """Aktivierungsfunktionen für das neuronale Netz"""
@@ -150,7 +152,7 @@ class TischtennisCNN:
         self.layers = []
         self.build_model()
         
-        self.training_history = {'loss': [], 'accuracy': []}
+        self.training_history = {'loss': [], 'accuracy': [], 'val_loss': [], 'val_accuracy': []}
         
     def build_model(self):
         """Erstellt die CNN Architektur"""
@@ -279,9 +281,11 @@ class TischtennisCNN:
             # Geschichte speichern
             self.training_history['loss'].append(train_loss)
             self.training_history['accuracy'].append(train_acc)
+            self.training_history['val_loss'].append(val_loss)
+            self.training_history['val_accuracy'].append(val_acc)
             
             # Alle 10 Epochen ausgeben
-            if (epoch + 1) % 10 == 0:
+            if (epoch + 1) % 2 == 0:
                 print(f"Epoch {epoch+1}/{epochs}")
                 print(f"  Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}")
                 print(f"  Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
@@ -360,22 +364,58 @@ class TischtennisCNN:
         plt.figure(figsize=(12, 4))
         
         plt.subplot(1, 2, 1)
-        plt.plot(self.training_history['loss'])
-        plt.title('Training Loss')
+        plt.plot(self.training_history['loss'], label='Training')
+        plt.plot(self.training_history['val_loss'], label='Validation')
+        plt.title('Model Loss')
         plt.xlabel('Epoch')
         plt.ylabel('Loss')
+        plt.legend()
         plt.grid(True)
         
         plt.subplot(1, 2, 2)
-        plt.plot(self.training_history['accuracy'])
-        plt.title('Training Accuracy')
+        plt.plot(self.training_history['accuracy'], label='Training')
+        plt.plot(self.training_history['val_accuracy'], label='Validation')
+        plt.title('Model Accuracy')
         plt.xlabel('Epoch')
         plt.ylabel('Accuracy')
+        plt.legend()
         plt.grid(True)
         
         plt.tight_layout()
         plt.savefig('visualizations/training_history_numpy.png')
         plt.show()
+    
+    def save_training_results(self, test_accuracy, class_names):
+        """Speichert Trainingsergebnisse als JSON"""
+        results = {
+            'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'model_type': '1D CNN (NumPy Implementation)',
+            'final_test_accuracy': float(test_accuracy),
+            'training_history': {
+                'final_train_loss': float(self.training_history['loss'][-1]),
+                'final_train_accuracy': float(self.training_history['accuracy'][-1]),
+                'final_val_loss': float(self.training_history['val_loss'][-1]),
+                'final_val_accuracy': float(self.training_history['val_accuracy'][-1]),
+                'epochs_trained': len(self.training_history['loss'])
+            },
+            'architecture': {
+                'input_shape': list(self.input_shape),
+                'num_classes': self.num_classes,
+                'layers': [
+                    'Conv1D(32, kernel=5) + ReLU + MaxPool(2)',
+                    'Conv1D(64, kernel=5) + ReLU + MaxPool(2)',
+                    'Conv1D(128, kernel=3) + ReLU + GlobalMaxPool',
+                    'Dense(64) + ReLU',
+                    'Dense(32) + ReLU',
+                    'Dense(4) + Softmax'
+                ]
+            }
+        }
+        
+        with open('models/training_results.json', 'w') as f:
+            json.dump(results, f, indent=2)
+        
+        print(f"\nTrainingsergebnisse gespeichert in models/training_results.json")
 
 def train_test_split(X, y, test_size=0.2, random_state=42):
     """Teilt Daten in Training und Test auf"""
@@ -394,19 +434,26 @@ def train_test_split(X, y, test_size=0.2, random_state=42):
 def load_and_prepare_data():
     """Lädt und bereitet die Daten vor"""
     try:
-        # KORRIGIERT: Richtige Dateinamen verwenden
+        # Daten laden
         X = np.load('processed_data/X_minimal.npy')
         y = np.load('processed_data/y_minimal.npy')
         
-        # Info-Datei laden für Details
-        with open('processed_data/info_minimal.pkl', 'rb') as f:
-            info = pickle.load(f)
+        # JSON Info-Dateien laden
+        with open('processed_data/info_minimal.json', 'r') as f:
+            info = json.load(f)
         
+        with open('processed_data/data_summary.json', 'r') as f:
+            summary = json.load(f)
+        
+        print("=== DATEN GELADEN ===")
         print(f"Datenform: {X.shape}")
         print(f"Labels: {np.unique(y)}")
         print(f"Schlagtypen: {info['stroke_types']}")
         print(f"Window Size: {info['window_size']}")
         print(f"Features: {info['features']}")
+        print(f"\nKlassenverteilung:")
+        for stroke, count in summary['class_distribution'].items():
+            print(f"  {stroke}: {count} Samples")
         
         # WICHTIG: Daten sind bereits normalisiert aus dem Preprocessing!
         # Keine weitere Normalisierung nötig
@@ -427,14 +474,19 @@ def load_and_prepare_data():
         
         return X_train, X_val, X_test, y_train, y_val, y_test, info['stroke_types']
         
-    except FileNotFoundError:
-        print("Keine Daten gefunden!")
+    except FileNotFoundError as e:
+        print(f"FEHLER - Datei nicht gefunden: {e}")
         print("Bitte erst data_preprocessing.py ausführen!")
+        return None, None, None, None, None, None, None
+    except json.JSONDecodeError as e:
+        print(f"FEHLER beim Lesen der JSON-Datei: {e}")
+        print("Die JSON-Datei scheint beschädigt zu sein.")
         return None, None, None, None, None, None, None
 
 def main():
     """Haupttraining"""
     print("Tischtennis CNN Training - Nur mit NumPy!")
+    print("Verwendet JSON für alle Metadaten")
     print("=" * 50)
     
     # Ordner erstellen
@@ -466,25 +518,31 @@ def main():
     print("\nEvaluation auf Testdaten:")
     test_acc, predictions = cnn.evaluate(X_test, y_test, display_names)
     
+    # Ergebnisse speichern
+    cnn.save_training_results(test_acc, class_names)
+    
+    # Modell-Info als JSON speichern
+    model_info = {
+        'model_type': '1D CNN (Pure NumPy)',
+        'input_shape': list(input_shape),
+        'num_classes': 4,
+        'class_names': class_names,
+        'display_names': display_names,
+        'test_accuracy': float(test_acc),
+        'window_size': int(X_train.shape[1]),
+        'num_features': int(X_train.shape[2]),
+        'implementation': 'pure_numpy',
+        'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    }
+    
+    with open('models/model_info_numpy.json', 'w') as f:
+        json.dump(model_info, f, indent=2)
+    
     print(f"\nTraining abgeschlossen!")
     print(f"Finale Test-Genauigkeit: {test_acc:.4f}")
     print(f"Modell verwendet {X_train.shape[2]} Features")
     print(f"Window Size: {X_train.shape[1]} Zeitschritte")
-    
-    # Modell-Info speichern
-    model_info = {
-        'input_shape': input_shape,
-        'num_classes': 4,
-        'class_names': class_names,
-        'display_names': display_names,
-        'test_accuracy': test_acc,
-        'window_size': X_train.shape[1],
-        'features': X_train.shape[2],
-        'implementation': 'pure_numpy'
-    }
-    
-    with open('models/model_info_numpy.pkl', 'wb') as f:
-        pickle.dump(model_info, f)
+    print("\nAlle Ergebnisse als JSON gespeichert - öffnen Sie die Dateien mit einem Texteditor!")
 
 if __name__ == "__main__":
     main()
