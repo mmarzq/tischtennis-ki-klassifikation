@@ -103,6 +103,24 @@ class TischtennisDataProcessor:
             data['gyro_z']**2
         )
         
+        """
+        A z-score, also known as a standard score, is a statistical measurement that describes 
+        the position of a raw score in terms of its distance from the mean, measured in standard deviations. 
+        It indicates how many standard deviations a data point is away from the mean of a distribution. 
+            - Positive z-scores indicate values above the mean, 
+            - while negative z-scores indicate values below the mean. 
+        Formula:
+            z = (x - μ) / σ, where 'x' is the raw score, 'μ' is the population mean, and 'σ' is the population standard deviation. 
+        Purpose:
+            Z-scores help standardize data, allowing for comparisons between different distributions and the identification of outliers. 
+        Interpretation:
+            A z-score of 0 means the data point is equal to the mean. A z-score of +1 means the data point is one standard deviation above the mean. A z-score of -2 means the data point is two standard deviations below the mean. 
+        Applications:
+            Z-scores are used in various statistical analyses, including hypothesis testing, probability estimation, and identifying unusual data points. 
+        Outliers:
+            Data points with very high or very low z-scores (e.g., beyond ±2 or ±3) are often considered outliers. 
+        Source: Google Gemini
+        """
         # Normalisierung (Z-Score)
         lin_acc_norm = (lin_acc_magnitude - lin_acc_magnitude.mean()) / (lin_acc_magnitude.std() + 1e-6)
         gyro_norm = (gyro_magnitude - gyro_magnitude.mean()) / (gyro_magnitude.std() + 1e-6)
@@ -110,7 +128,7 @@ class TischtennisDataProcessor:
         # Gewichtete Kombination
         w_acc = 0.7  # Lineare Beschleunigung ist wichtiger
         w_gyro = 0.3
-        movement_intensity = w_acc * lin_acc_norm + w_gyro * gyro_norm
+        movement_intensity = w_acc * lin_acc_norm + w_gyro * gyro_norm # obere Berechnungen sind zur Ermittlung der Bewegungsintensität 
         
         # Schwellwert basierend auf Standardabweichung
         threshold = movement_intensity.mean() + threshold_factor * movement_intensity.std()
@@ -126,7 +144,7 @@ class TischtennisDataProcessor:
         return peaks, movement_intensity
     
     def extract_stroke_windows(self, data, peaks):
-        """Extrahiert Fenster um erkannte Schläge"""
+        """ Extrahiert Fenster (geschnittetes Data) um erkannte Schläge"""
         windows = []
         
         for peak in peaks:
@@ -135,7 +153,7 @@ class TischtennisDataProcessor:
             end = min(len(data), peak + self.window_size // 2)
             
             # Nur vollständige Fenster verwenden
-            if end - start == self.window_size:
+            if end - start == self.window_size: # das heißt: en Schlag muss ungefähr in der Mitte sein (zwischen 2. bis 4.Minute)
                 window = data.iloc[start:end].copy()
                 window.reset_index(drop=True, inplace=True)
                 windows.append(window)
@@ -145,7 +163,7 @@ class TischtennisDataProcessor:
     def calculate_features(self, window):
         """Berechnet Features für ein Fenster"""
         # Extrahiere nur die Features die wir für das Training verwenden
-        sensor_data = window[self.training_features].values
+        sensor_data = window[self.training_features].values #Timestamps gehöhren nicht dazu 
         
         # Zusätzliche abgeleitete Features können hier berechnet werden
         features = {}
@@ -166,13 +184,18 @@ class TischtennisDataProcessor:
         
         return sensor_data, features
     
-    def process_stroke_type(self, stroke_type, input_folder):
+    def process_stroke_type(self, stroke_type, input_folder='./rohdaten', output_folder='./processed_data'):
         """Verarbeitet alle Dateien eines Schlagtyps"""
         all_windows = []
         all_features = []
         
         # Alle CSV-Dateien für diesen Schlagtyp
         files = glob.glob(f"{input_folder}/{stroke_type}/*.csv")
+        
+        #Ordner für Visualisierungen erstellen
+        #visual_processed_data_folder = f'{output_folder}/visual_processed/{stroke_type}'
+        visual_processed_data_folder = os.path.join(output_folder, 'visual_processed', stroke_type)
+        os.makedirs(visual_processed_data_folder, exist_ok=True)
         
         print(f"\nVerarbeite {stroke_type}: {len(files)} Dateien gefunden")
         
@@ -195,9 +218,19 @@ class TischtennisDataProcessor:
                 
                 print(f"  {os.path.basename(file)}: {len(windows)} Schläge erkannt")
                 
+                #visualisiere
+                filename = os.path.basename(file)
+                visualization_path = os.path.join(visual_processed_data_folder, f"{filename}.png")
+                self.visualize_stroke_detection(filtered_data, peaks, intensity, visualization_path)
+                
                 # Features berechnen
-                for window in windows:
-                    sensor_data, features = self.calculate_features(window)
+                #for window in windows:
+                for i, window in enumerate(windows):
+                    #Visualisiere window (geschnittene data inkl. Timestamps, Mitte ist ein peak)
+                    window_name = os.path.join(visual_processed_data_folder, f"{filename}_window_{i}.png")
+                    self.visualize_stroke_detection(window, output_file=window_name)
+                    
+                    sensor_data, features = self.calculate_features(window) #Merkmale, sensor_data: window (ohne Timestamps), wetere features: 'max_lin_acc', 'max_gyro'
                     all_windows.append(sensor_data)
                     all_features.append(features)
                     
@@ -205,11 +238,17 @@ class TischtennisDataProcessor:
                 print(f"  Fehler bei {os.path.basename(file)}: {str(e)}")
                 continue
         
-        return all_windows, all_features
+        #all_windows: alle window (geschnittete data (exl.Timestamps), Mitte ist ein peak)
+        #all_features: alle weitere MErkmale(features): 'max_lin_acc', 'max_gyro'
+        return all_windows, all_features 
     
-    def visualize_stroke_detection(self, data, peaks, intensity, output_file=None):
+    def visualize_stroke_detection(self, data, peaks=None, intensity=None, output_file=None):
         """Visualisiert die Schlagerkennung"""
-        fig, axes = plt.subplots(4, 1, figsize=(12, 12))
+        # Prüfe ob peaks und intensity vorhanden sind
+        show_stroke_detection = peaks is not None and intensity is not None
+        num_plots = 4 if show_stroke_detection else 3
+        
+        fig, axes = plt.subplots(num_plots, 1, figsize=(12, 12))
         
         # Gyroskop
         axes[0].plot(data['gyro_x'], label='X', alpha=0.7)
@@ -240,23 +279,28 @@ class TischtennisDataProcessor:
         axes[2].grid(True)
         
         # Bewegungsintensität mit erkannten Peaks
-        axes[3].plot(intensity, label='Bewegungsintensität')
-        axes[3].plot(peaks, intensity[peaks], 'ro', markersize=8, label='Erkannte Schläge')
-        axes[3].set_ylabel('Intensität')
-        axes[3].set_xlabel('Samples')
-        axes[3].set_title('Schlagerkennung')
-        axes[3].legend()
-        axes[3].grid(True)
+        if show_stroke_detection:
+            axes[3].plot(intensity, label='Bewegungsintensität')
+            axes[3].plot(peaks, intensity[peaks], 'ro', markersize=8, label='Erkannte Schläge')
+            axes[3].set_ylabel('Intensität')
+            axes[3].set_xlabel('Samples')
+            axes[3].set_title('Schlagerkennung')
+            axes[3].legend()
+            axes[3].grid(True)
         
         plt.tight_layout()
         
         if output_file:
             plt.savefig(output_file)
-        plt.show()
+            plt.close()  #Schließe Figure um Speicher zu sparen #prevent memory leaks when generating many visualization images
+        #plt.show()
 
 def process_all_data():
     """Hauptfunktion zur Verarbeitung aller Daten"""
     processor = TischtennisDataProcessor(window_size=200, overlap=50)
+    
+    #Ordner für verarbeitete Rohdaten erstellen falls nicht vorhanden
+    os.makedirs('./processed_data', exist_ok=True)
     
     stroke_types = ['vorhand_topspin', 'vorhand_schupf', 'rueckhand_topspin', 'rueckhand_schupf']
     label_map = {stroke: idx for idx, stroke in enumerate(stroke_types)}
@@ -266,17 +310,17 @@ def process_all_data():
     
     # Verarbeite jeden Schlagtyp
     for stroke_type in stroke_types:
-        windows, features = processor.process_stroke_type(stroke_type, './rohdaten')
+        windows, features = processor.process_stroke_type(stroke_type)
         
         # Labels hinzufügen
         labels = [label_map[stroke_type]] * len(windows)
         
-        all_data.extend(windows)
-        all_labels.extend(labels)
+        all_data.extend(windows)    #Windows von jedem Schlagart wird hier gesammelt 
+        all_labels.extend(labels)   #Label von alle Daten: 0,1,2,3
     
     # In numpy arrays konvertieren
     if len(all_data) > 0:
-        X = np.array(all_data)
+        X = np.array(all_data) 
         y = np.array(all_labels)
         
         print(f"\nGesamtdaten: {X.shape[0]} Schläge")
@@ -284,23 +328,24 @@ def process_all_data():
         print(f"Features: {len(processor.training_features)} - {processor.training_features}")
         print(f"Klassen: {np.unique(y, return_counts=True)}")
         
-        # Ordner erstellen falls nicht vorhanden
-        os.makedirs('./processed_data', exist_ok=True)
-        
         # Speichern
         np.save('./processed_data/X_data.npy', X)
         np.save('./processed_data/y_labels.npy', y)
         
+        """ 
+        X hat Form: (n_samples, 200, 10) = (Anzahl Schläge, Zeitschritte, Features)
+        Reshape macht daraus: (n_samples * 200, 10)
+        """
         # Scaler fit und speichern
-        X_reshaped = X.reshape(-1, X.shape[-1])
-        processor.scaler.fit(X_reshaped)
+        X_reshaped = X.reshape(-1, X.shape[-1])     # -1 = automatisch berechnen
+        processor.scaler.fit(X_reshaped)            # standard skaliert --> (z-wert normalisiert ?)
         
         with open('./processed_data/scaler.pkl', 'wb') as f:
             pickle.dump(processor.scaler, f)
         
         # Feature-Namen speichern
         with open('./processed_data/feature_names.pkl', 'wb') as f:
-            pickle.dump(processor.training_features, f)
+            pickle.dump(processor.training_features, f) # Speichert das Dictionary (JSON-Objekte) als Binär in Datei (.pkl oder pickel ooder irgendwas) 
         
         print("\nDaten gespeichert in processed_data/")
         
