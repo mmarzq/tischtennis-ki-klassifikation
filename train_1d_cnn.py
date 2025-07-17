@@ -1,271 +1,122 @@
-"""
-1D CNN Modell für Tischtennisschlag-Klassifikation
-Training und Evaluation des neuronalen Netzes
-"""
-
+import torch
+import torch.nn as nn
+import torch.optim as optim
 import numpy as np
-import tensorflow as tf
-from tensorflow.keras import layers, models
-from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import classification_report, confusion_matrix
-import matplotlib.pyplot as plt
-import seaborn as sns
-import pickle
-import os
+import json
+from torch.utils.data import DataLoader, TensorDataset, random_split
 
-class TischtennisCNN:
-    def __init__(self, input_shape, num_classes=4):
-        self.input_shape = input_shape
-        self.num_classes = num_classes
-        self.model = None
-        self.history = None
-        
-    def build_model(self):
-        """Erstellt die 1D CNN Architektur - angepasst für 10 Features"""
-        self.model = models.Sequential([
-            # Input Layer
-            layers.Input(shape=self.input_shape),
-            
-            # 1. Convolutional Block
-            layers.Conv1D(64, kernel_size=5, activation='relu', padding='same'),
-            layers.BatchNormalization(),
-            layers.MaxPooling1D(pool_size=2),
-            layers.Dropout(0.2),
-            
-            # 2. Convolutional Block
-            layers.Conv1D(128, kernel_size=5, activation='relu', padding='same'),
-            layers.BatchNormalization(),
-            layers.MaxPooling1D(pool_size=2),
-            layers.Dropout(0.2),
-            
-            # 3. Convolutional Block
-            layers.Conv1D(256, kernel_size=3, activation='relu', padding='same'),
-            layers.BatchNormalization(),
-            layers.GlobalMaxPooling1D(),
-            layers.Dropout(0.3),
-            
-            # Dense Layers
-            layers.Dense(128, activation='relu'),
-            layers.BatchNormalization(),
-            layers.Dropout(0.4),
-            
-            layers.Dense(64, activation='relu'),
-            layers.BatchNormalization(),
-            layers.Dropout(0.4),
-            
-            # Output Layer
-            layers.Dense(self.num_classes, activation='softmax')
-        ])
-        
-        # Modell kompilieren
-        self.model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=0.001),
-            loss='sparse_categorical_crossentropy',
-            metrics=['accuracy']
-        )
-        
-        return self.model
-    
-    def train(self, X_train, y_train, X_val, y_val, epochs=100, batch_size=32):
-        """Trainiert das Modell"""
-        # Callbacks
-        callbacks = [
-            EarlyStopping(
-                monitor='val_loss',
-                patience=15,
-                restore_best_weights=True,
-                verbose=1
-            ),
-            ReduceLROnPlateau(
-                monitor='val_loss',
-                factor=0.5,
-                patience=10,
-                min_lr=1e-6,
-                verbose=1
-            ),
-            ModelCheckpoint(
-                'models/best_model.h5',
-                monitor='val_accuracy',
-                save_best_only=True,
-                verbose=1
-            )
-        ]
-        
-        # Training
-        self.history = self.model.fit(
-            X_train, y_train,
-            validation_data=(X_val, y_val),
-            epochs=epochs,
-            batch_size=batch_size,
-            callbacks=callbacks,
-            verbose=1
-        )
-        
-        return self.history
-    
-    def evaluate(self, X_test, y_test, class_names):
-        """Evaluiert das Modell"""
-        # Vorhersagen
-        y_pred = self.model.predict(X_test)
-        y_pred_classes = np.argmax(y_pred, axis=1)
-        
-        # Metriken berechnen
-        test_loss, test_accuracy = self.model.evaluate(X_test, y_test, verbose=0)
-        print(f"\nTest Accuracy: {test_accuracy:.4f}")
-        print(f"Test Loss: {test_loss:.4f}")
-        
-        # Classification Report
-        print("\nClassification Report:")
-        print(classification_report(y_test, y_pred_classes, 
-                                  target_names=class_names))
-        
-        # Confusion Matrix
-        cm = confusion_matrix(y_test, y_pred_classes)
-        self.plot_confusion_matrix(cm, class_names)
-        
-        return test_accuracy, y_pred_classes
-    
-    def plot_confusion_matrix(self, cm, class_names):
-        """Zeigt die Confusion Matrix"""
-        plt.figure(figsize=(10, 8))
-        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
-                    xticklabels=class_names,
-                    yticklabels=class_names)
-        plt.title('Confusion Matrix')
-        plt.ylabel('Wahre Klasse')
-        plt.xlabel('Vorhergesagte Klasse')
-        plt.tight_layout()
-        plt.savefig('visualizations/confusion_matrix.png')
-        plt.show()
-    
-    def plot_training_history(self):
-        """Zeigt den Trainingsverlauf"""
-        fig, axes = plt.subplots(1, 2, figsize=(15, 5))
-        
-        # Accuracy
-        axes[0].plot(self.history.history['accuracy'], label='Training')
-        axes[0].plot(self.history.history['val_accuracy'], label='Validation')
-        axes[0].set_title('Model Accuracy')
-        axes[0].set_xlabel('Epoch')
-        axes[0].set_ylabel('Accuracy')
-        axes[0].legend()
-        axes[0].grid(True)
-        
-        # Loss
-        axes[1].plot(self.history.history['loss'], label='Training')
-        axes[1].plot(self.history.history['val_loss'], label='Validation')
-        axes[1].set_title('Model Loss')
-        axes[1].set_xlabel('Epoch')
-        axes[1].set_ylabel('Loss')
-        axes[1].legend()
-        axes[1].grid(True)
-        
-        plt.tight_layout()
-        plt.savefig('visualizations/training_history.png')
-        plt.show()
+class Tischtennis1DCNN(nn.Module):
+    def __init__(self, input_channels=10, num_classes=4, window_size=200):
+        super().__init__()
+        self.conv1 = nn.Conv1d(input_channels, 32, kernel_size=5, padding=2)
+        self.pool1 = nn.MaxPool1d(kernel_size=2)
+        self.conv2 = nn.Conv1d(32, 64, kernel_size=5, padding=2)
+        self.pool2 = nn.MaxPool1d(kernel_size=2)
+        self.conv3 = nn.Conv1d(64, 128, kernel_size=3, padding=1)
+        self.global_pool = nn.AdaptiveMaxPool1d(1)
+        self.fc1 = nn.Linear(128, 64)
+        self.fc2 = nn.Linear(64, 32)
+        self.fc3 = nn.Linear(32, num_classes)
+        self.relu = nn.ReLU()
+        self.softmax = nn.Softmax(dim=1)
 
-def load_and_prepare_data():
-    """Lädt und bereitet die Daten vor"""
-    # Daten laden
-    X = np.load('processed_data/X_data.npy')
-    y = np.load('processed_data/y_labels.npy')
-    
-    # Scaler laden
-    with open('processed_data/scaler.pkl', 'rb') as f:
-        scaler = pickle.load(f)
-    
-    # Feature-Namen laden (falls vorhanden)
-    try:
-        with open('processed_data/feature_names.pkl', 'rb') as f:
-            feature_names = pickle.load(f)
-            print(f"Geladene Features ({len(feature_names)}): {feature_names}")
-    except:
-        print("Feature-Namen nicht gefunden")
-    
-    # Normalisierung
-    n_samples, n_timesteps, n_features = X.shape
-    print(f"Datenform: {n_samples} Samples, {n_timesteps} Zeitschritte, {n_features} Features")
-    
-    X_flat = X.reshape(-1, n_features)
-    X_scaled = scaler.transform(X_flat)
-    X_scaled = X_scaled.reshape(n_samples, n_timesteps, n_features)
-    
-    # Train/Val/Test Split
-    X_temp, X_test, y_temp, y_test = train_test_split(
-        X_scaled, y, test_size=0.2, random_state=42, stratify=y
-    )
-    
-    X_train, X_val, y_train, y_val = train_test_split(
-        X_temp, y_temp, test_size=0.2, random_state=42, stratify=y_temp
-    )
-    
-    print(f"\nDatensätze:")
-    print(f"Training: {X_train.shape[0]} Samples")
-    print(f"Validation: {X_val.shape[0]} Samples")
-    print(f"Test: {X_test.shape[0]} Samples")
-    
-    return X_train, X_val, X_test, y_train, y_val, y_test
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.relu(x)
+        x = self.pool1(x)
+        x = self.conv2(x)
+        x = self.relu(x)
+        x = self.pool2(x)
+        x = self.conv3(x)
+        x = self.relu(x)
+        x = self.global_pool(x)
+        x = x.view(x.size(0), -1)
+        x = self.fc1(x)
+        x = self.relu(x)
+        x = self.fc2(x)
+        x = self.relu(x)
+        x = self.fc3(x)
+        return x
+
+def load_data():
+    X = np.load('processed_data/X_minimal.npy')
+    y = np.load('processed_data/y_minimal.npy')
+    with open('processed_data/info_minimal.json', 'r') as f:
+        info = json.load(f)
+    class_names = info['stroke_types']
+    # PyTorch expects (batch, channels, seq_len)
+    X = np.transpose(X, (0, 2, 1)).astype(np.float32)
+    y = y.astype(np.int64)
+    return X, y, class_names
+
+def train_model(model, train_loader, val_loader, device, epochs=50, lr=0.001):
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    best_val_acc = 0
+    for epoch in range(epochs):
+        model.train()
+        running_loss = 0.0
+        correct = 0
+        total = 0
+        for X_batch, y_batch in train_loader:
+            X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+            optimizer.zero_grad()
+            outputs = model(X_batch)
+            loss = criterion(outputs, y_batch)
+            loss.backward()
+            optimizer.step()
+            running_loss += loss.item() * X_batch.size(0)
+            _, predicted = torch.max(outputs, 1)
+            correct += (predicted == y_batch).sum().item()
+            total += y_batch.size(0)
+        train_loss = running_loss / total
+        train_acc = correct / total
+        val_loss, val_acc = evaluate(model, val_loader, device)
+        if (epoch+1) % 2 == 0:
+            print(f"Epoch {epoch+1}/{epochs}")
+            print(f"  Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}")
+            print(f"  Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
+        if val_acc > best_val_acc:
+            best_val_acc = val_acc
+            torch.save(model.state_dict(), 'models/best_cnn_pytorch.pth')
+    print("Training abgeschlossen. Bestes Val Acc: {:.4f}".format(best_val_acc))
+
+def evaluate(model, data_loader, device):
+    model.eval()
+    criterion = nn.CrossEntropyLoss()
+    running_loss = 0.0
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for X_batch, y_batch in data_loader:
+            X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+            outputs = model(X_batch)
+            loss = criterion(outputs, y_batch)
+            running_loss += loss.item() * X_batch.size(0)
+            _, predicted = torch.max(outputs, 1)
+            correct += (predicted == y_batch).sum().item()
+            total += y_batch.size(0)
+    return running_loss / total, correct / total
 
 def main():
-    """Haupttraining"""
-    # Klassen definieren
-    class_names = ['Vorhand Topspin', 'Vorhand Schupf', 
-                   'Rückhand Topspin', 'Rückhand Schupf']
-    
-    # Ordner erstellen
-    os.makedirs('models', exist_ok=True)
-    os.makedirs('visualizations', exist_ok=True)
-    
-    # Daten laden
-    X_train, X_val, X_test, y_train, y_val, y_test = load_and_prepare_data()
-    
-    # Modell erstellen
-    input_shape = (X_train.shape[1], X_train.shape[2])  # (timesteps, features)
-    cnn = TischtennisCNN(input_shape, num_classes=4)
-    
-    # Modell bauen
-    model = cnn.build_model()
-    print("\nModell-Architektur:")
-    model.summary()
-    
-    # Training
-    print("\nStarte Training...")
-    history = cnn.train(X_train, y_train, X_val, y_val, 
-                       epochs=100, batch_size=32)
-    
-    # Trainingsverlauf anzeigen
-    cnn.plot_training_history()
-    
-    # Evaluation
-    print("\nEvaluation auf Testdaten:")
-    test_acc, predictions = cnn.evaluate(X_test, y_test, class_names)
-    
-    # Modell speichern
-    model.save('models/final_tischtennis_model.h5')
-    
-    # Modell-Informationen speichern
-    model_info = {
-        'input_shape': input_shape,
-        'num_classes': 4,
-        'num_features': X_train.shape[2],
-        'class_names': class_names,
-        'test_accuracy': test_acc
-    }
-    
-    # Feature-Namen hinzufügen falls vorhanden
-    try:
-        with open('processed_data/feature_names.pkl', 'rb') as f:
-            model_info['feature_names'] = pickle.load(f)
-    except:
-        pass
-    
-    with open('models/model_info.pkl', 'wb') as f:
-        pickle.dump(model_info, f)
-    
-    print("\nTraining abgeschlossen!")
-    print(f"Finale Test-Genauigkeit: {test_acc:.4f}")
-    print(f"Modell verwendet {X_train.shape[2]} Features")
+    X, y, class_names = load_data()
+    dataset = TensorDataset(torch.tensor(X), torch.tensor(y))
+    n_total = len(dataset)
+    n_test = int(0.2 * n_total)
+    n_val = int(0.2 * n_total)
+    n_train = n_total - n_test - n_val
+    train_set, val_set, test_set = random_split(dataset, [n_train, n_val, n_test], generator=torch.Generator().manual_seed(42))
+    train_loader = DataLoader(train_set, batch_size=32, shuffle=True)
+    val_loader = DataLoader(val_set, batch_size=32)
+    test_loader = DataLoader(test_set, batch_size=32)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = Tischtennis1DCNN(input_channels=X.shape[1], num_classes=len(class_names), window_size=X.shape[2]).to(device)
+    #print("Windowsgröße:", X.shape[2])
+    print("Starte Training für 50 Epochen...")
+    train_model(model, train_loader, val_loader, device, epochs=300, lr=0.001)
+    print("Evaluierung auf Testdaten...")
+    test_loss, test_acc = evaluate(model, test_loader, device)
+    print(f"Test Loss: {test_loss:.4f}, Test Accuracy: {test_acc:.4f}")
 
 if __name__ == "__main__":
     main()

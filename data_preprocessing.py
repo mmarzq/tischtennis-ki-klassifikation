@@ -1,275 +1,241 @@
 """
-Datenvorverarbeitung für Tischtennisschlag-Klassifikation
-Segmentiert Rohdaten und bereitet sie für 1D CNN vor
+MINIMALE Datenvorverarbeitung für Tischtennisschlag-Klassifikation
+Mit JSON statt Pickle für bessere Lesbarkeit und Sicherheit
+Nur mit pandas, numpy und json (Python Standard-Bibliotheken)
+
+Simpler gemacht:
+    - Butterworth-Filter → simple_smooth() (einfacher gleitender Durchschnitt)
+    - scipy.find_peaks → find_movement_peaks() (eigene Peak-Erkennung)
+    - sklearn.StandardScaler → simple_normalize() (manuelle Z-Score Normalisierung)
+    - pickle → JSON für alle Metadaten (NumPy Arrays bleiben als .npy)
 """
 
 import pandas as pd
 import numpy as np
-from scipy.signal import find_peaks, butter, filtfilt
-from scipy import signal
 import os
 import glob
-import matplotlib.pyplot as plt
-from sklearn.preprocessing import StandardScaler
-import pickle
+import json
+import matplotlib.pyplot as plt 
 
-class TischtennisDataProcessor:
-    def __init__(self, window_size=200, overlap=50):
-        self.window_size = window_size  # 200 samples @ 100Hz = 2 Sekunden
-        self.overlap = overlap
-        self.scaler = StandardScaler()
+class MinimalTischtennisProcessor:
+    def __init__(self, window_size=200):
+        self.window_size = window_size
         
-        # Features die wir für das Training verwenden
+        # Features die wir verwenden
         self.training_features = [
             'gyro_x', 'gyro_y', 'gyro_z',
             'lin_acc_x', 'lin_acc_y', 'lin_acc_z',
             'quat_w', 'quat_x', 'quat_y', 'quat_z'
         ]
         
-    def load_raw_data(self, filepath):
-        """Lädt CSV-Rohdaten (kompatibel mit Arduino und NGIMU)"""
-        df = pd.read_csv(filepath)
+        # Für einfache Normalisierung (statt sklearn StandardScaler)
+        self.feature_means = None
+        self.feature_stds = None
+    
+    def load_csv_data(self, filepath):
+        """Lädt CSV-Datei und normalisiert Spaltennamen"""
+        try:
+            df = pd.read_csv(filepath)
+        except:
+            print(f"Fehler beim Laden von {filepath}")
+            return pd.DataFrame()
         
-        # Spaltenamen normalisieren - beide Formate unterstützen
-        col_mapping = {
-            'Timestamp': 'timestamp',
-            'Acc_X': 'acc_x',
+        # Spaltennamen vereinheitlichen
+        column_map = {
+            'Timestamp': 'timestamp', 
+            'Acc_X': 'acc_x', 
             'Acc_Y': 'acc_y', 
             'Acc_Z': 'acc_z',
-            'Gyro_X': 'gyro_x',
-            'Gyro_Y': 'gyro_y',
+            'Gyro_X': 'gyro_x', 
+            'Gyro_Y': 'gyro_y', 
             'Gyro_Z': 'gyro_z',
-            'Mag_X': 'mag_x',
-            'Mag_Y': 'mag_y',
-            'Mag_Z': 'mag_z',
+            'Mag_X': 'mag_x', 
+            'Mag_Y': 'mag_y', 
+            'Mag_Z': 'mag_z', 
             'Bar': 'bar',
-            'Quat_W': 'quat_w',
-            'Quat_X': 'quat_x',
-            'Quat_Y': 'quat_y',
+            'Quat_W': 'quat_w', 
+            'Quat_X': 'quat_x', 
+            'Quat_Y': 'quat_y', 
             'Quat_Z': 'quat_z',
-            'Lin_Acc_X': 'lin_acc_x',
-            'Lin_Acc_Y': 'lin_acc_y',
+            'Lin_Acc_X': 'lin_acc_x', 
+            'Lin_Acc_Y': 'lin_acc_y', 
             'Lin_Acc_Z': 'lin_acc_z'
         }
         
-        # Spalten umbenennen falls nötig
-        df.rename(columns=col_mapping, inplace=True)
+        df.rename(columns=column_map, inplace=True)
         
-        # Prüfen ob alle benötigten Spalten vorhanden sind
-        required_cols = ['timestamp'] + self.training_features
-        missing_cols = [col for col in required_cols if col not in df.columns]
+        # Fehlende Spalten mit 0 auffüllen
+        for feature in self.training_features:
+            if feature not in df.columns:
+                df[feature] = 0.0
         
-        if missing_cols:
-            print(f"Warnung: Fehlende Spalten in {filepath}: {missing_cols}")
-            # Für fehlende Spalten Nullen einfügen
-            for col in missing_cols:
-                df[col] = 0.0
+        # Nur benötigte Spalten behalten
+        needed_cols = ['timestamp'] + self.training_features
+        available_cols = [col for col in needed_cols if col in df.columns]
         
-        # Nur relevante Spalten behalten
-        available_cols = [col for col in required_cols if col in df.columns]
-        df = df[available_cols]
-        
-        return df
+        return df[available_cols]
     
-    def apply_filters(self, data, cutoff_freq=20, fs=100):
-        """Wendet Butterworth-Tiefpassfilter an"""
-        nyquist = fs / 2
-        normal_cutoff = cutoff_freq / nyquist
-        b, a = butter(4, normal_cutoff, btype='low', analog=False)
+    def simple_smooth(self, values, window=5):
+        """
+        Einfache Glättung - ersetzt komplizierte Filter
+        Einfacher gleitender Durchschnitt
+        """
+        if len(values) < window:
+            return values
         
-        filtered_data = data.copy()
+        smoothed = np.zeros_like(values)
+        half_window = window // 2
         
-        # Filter nur auf kontinuierliche Sensordaten anwenden (nicht auf Quaternions)
-        filter_cols = ['gyro_x', 'gyro_y', 'gyro_z', 'lin_acc_x', 'lin_acc_y', 'lin_acc_z']
+        # Anfang und Ende einfach kopieren
+        smoothed[:half_window] = values[:half_window]
+        smoothed[-half_window:] = values[-half_window:]
         
-        for col in filter_cols:
-            if col in filtered_data.columns:
-                filtered_data[col] = filtfilt(b, a, data[col])
+        # Mittlerer Teil - gleitender Durchschnitt
+        for i in range(half_window, len(values) - half_window):
+            smoothed[i] = np.mean(values[i-half_window:i+half_window+1])
         
-        return filtered_data
+        return smoothed
     
-    def detect_strokes(self, data, threshold_factor=0.5):
-        """Erkennt einzelne Schläge basierend auf Bewegungsintensität"""
-        # Berechne Bewegungsintensität aus linearer Beschleunigung und Gyroskop
-        lin_acc_magnitude = np.sqrt(
-            data['lin_acc_x']**2 + 
-            data['lin_acc_y']**2 + 
-            data['lin_acc_z']**2
-        )
-        
-        gyro_magnitude = np.sqrt(
-            data['gyro_x']**2 + 
-            data['gyro_y']**2 + 
-            data['gyro_z']**2
-        )
-        
-        """ Algorithmus v0: einfache Kombination der Magnituden"""   
-        """     
-        # Kombinierte Bewegungsintensität
-        #movement_intensity = lin_acc_magnitude + (gyro_magnitude / 100) # 100: Skalierung (empirische Wahl)
-        
-        Der Faktor 100 ist eine empirische Wahl:
-            Bringt beide Signale in vergleichbare Größenordnungen
-            Verhindert, dass die Winkelgeschwindigkeit die Gesamtintensität dominiert
-            Ermöglicht, dass beide Sensortypen zur Schlagerkennung beitragen
+    def find_movement_peaks(self, data):
         """
-
-        """ Algorithmus v1: gewichtete Kombination der normalisierten (Z-Wert) Magnituden"""
+        Einfache Schlagerkennung - ersetzt scipy find_peaks
+        Findet Bewegungsintensitäts-Spitzen
         """
-        A z-score, also known as a standard score, is a statistical measurement that describes 
-        the position of a raw score in terms of its distance from the mean, measured in standard deviations. 
-        It indicates how many standard deviations a data point is away from the mean of a distribution. 
-            - Positive z-scores indicate values above the mean, 
-            - while negative z-scores indicate values below the mean. 
-        Formula:
-            z = (x - μ) / σ, where 'x' is the raw score, 'μ' is the population mean, and 'σ' is the population standard deviation. 
-        Purpose:
-            Z-scores help standardize data, allowing for comparisons between different distributions and the identification of outliers. 
-        Interpretation:
-            A z-score of 0 means the data point is equal to the mean. A z-score of +1 means the data point is one standard deviation above the mean. A z-score of -2 means the data point is two standard deviations below the mean. 
-        Applications:
-            Z-scores are used in various statistical analyses, including hypothesis testing, probability estimation, and identifying unusual data points. 
-        Outliers:
-            Data points with very high or very low z-scores (e.g., beyond ±2 or ±3) are often considered outliers. 
-        Source: Google Gemini
-        """
-        # Normalisierung (Z-Wert-Normalisierung)
-        lin_acc_norm = (lin_acc_magnitude - lin_acc_magnitude.mean()) / (lin_acc_magnitude.std() + 1e-6)
-        gyro_norm = (gyro_magnitude - gyro_magnitude.mean()) / (gyro_magnitude.std() + 1e-6)
+        # Bewegungsintensität berechnen
+        lin_acc = np.sqrt(data['lin_acc_x']**2 + data['lin_acc_y']**2 + data['lin_acc_z']**2)
+        gyro = np.sqrt(data['gyro_x']**2 + data['gyro_y']**2 + data['gyro_z']**2)
         
-        # Gewichtete Kombination
-        w_acc = 0.8  # Lineare Beschleunigung ist wichtiger
-        w_gyro = 0.2
-        movement_intensity = w_acc * lin_acc_norm + w_gyro * gyro_norm # obere Berechnungen sind zur Ermittlung der Bewegungsintensität 
+        # Einfache Normalisierung
+        lin_acc_norm = (lin_acc - np.mean(lin_acc)) / (np.std(lin_acc) + 0.001)
+        gyro_norm = (gyro - np.mean(gyro)) / (np.std(gyro) + 0.001)
         
-        # Schwellwert basierend auf Standardabweichung
-        threshold = movement_intensity.mean() + threshold_factor * movement_intensity.std()
+        # Bewegungsintensität (70% Beschleunigung, 30% Gyro)
+        intensity = 0.7 * lin_acc_norm + 0.3 * gyro_norm
         
-        # Finde Peaks
-        peaks, properties = find_peaks(
-            movement_intensity, 
-            height=threshold,
-            distance=50,  # Mindestabstand zwischen Schlägen (0.5s @ 100Hz)
-            prominence=threshold/2
-        )
+        # Glättung
+        intensity_smooth = self.simple_smooth(intensity, window=5)
         
-        return peaks, movement_intensity
+        # Schwellwert für Peaks
+        threshold = np.mean(intensity_smooth) + 0.5 * np.std(intensity_smooth)
+        
+        # Einfache Peak-Suche
+        peaks = []
+        min_distance = 50  # Mindestabstand zwischen Schlägen
+        
+        for i in range(1, len(intensity_smooth) - 1):
+            # Ist es ein lokales Maximum über dem Schwellwert?
+            if (intensity_smooth[i] > threshold and 
+                intensity_smooth[i] > intensity_smooth[i-1] and 
+                intensity_smooth[i] > intensity_smooth[i+1]):
+                
+                # Prüfe Mindestabstand zu vorherigen Peaks
+                if not peaks or (i - peaks[-1]) >= min_distance:
+                    peaks.append(i)
+        
+        return peaks, intensity_smooth
     
-    def extract_stroke_windows(self, data, peaks):
-        """ Extrahiert Fenster (geschnittetes Data) um erkannte Schläge"""
+    def extract_windows_around_peaks(self, data, peaks):
+        """Schneidet Fenster um erkannte Peaks heraus"""
         windows = []
+        half_window = self.window_size // 2
         
         for peak in peaks:
-            # Fenster zentriert um Peak
-            start = max(0, peak - self.window_size // 2)
-            end = min(len(data), peak + self.window_size // 2)
+            start = max(0, peak - half_window)
+            end = min(len(data), peak + half_window)
             
             # Nur vollständige Fenster verwenden
-            if end - start == self.window_size: # das heißt: en Schlag muss ungefähr in der Mitte sein (zwischen 2. bis 4.Minute)
-                window = data.iloc[start:end].copy()
-                window.reset_index(drop=True, inplace=True)
-                windows.append(window)
+            if end - start == self.window_size:
+                window_data = data.iloc[start:end][self.training_features].values
+                windows.append(window_data)
         
         return windows
     
-    def calculate_features(self, window):
-        """Berechnet Features für ein Fenster"""
-        # Extrahiere nur die Features die wir für das Training verwenden
-        sensor_data = window[self.training_features].values #Timestamps gehöhren nicht dazu 
-        
-        # Zusätzliche abgeleitete Features können hier berechnet werden
-        features = {}
-        
-        # Bewegungsintensität aus linearer Beschleunigung
-        features['max_lin_acc'] = np.sqrt(
-            window['lin_acc_x']**2 + 
-            window['lin_acc_y']**2 + 
-            window['lin_acc_z']**2
-        ).max()
-        
-        # Maximale Winkelgeschwindigkeit
-        features['max_gyro'] = np.sqrt(
-            window['gyro_x']**2 + 
-            window['gyro_y']**2 + 
-            window['gyro_z']**2
-        ).max()
-        
-        return sensor_data, features
-    
-    def process_stroke_type(self, stroke_type, input_folder='./rohdaten', output_folder='./processed_data'):
+    def process_one_stroke_type(self, stroke_type, data_folder):
         """Verarbeitet alle Dateien eines Schlagtyps"""
+        pattern = f"{data_folder}/{stroke_type}/*.csv"
+        files = glob.glob(pattern)
+        
+        print(f"Verarbeite {stroke_type}: {len(files)} Dateien")
+        
         all_windows = []
-        all_features = []
         
-        # Alle CSV-Dateien für diesen Schlagtyp
-        files = glob.glob(f"{input_folder}/{stroke_type}/*.csv")
-        
-        #Ordner für Visualisierungen erstellen
-        #visual_processed_data_folder = f'{output_folder}/visual_processed/{stroke_type}'
-        visual_processed_data_folder = os.path.join(output_folder, 'visual_processed', stroke_type)
+        # Ordner für Visualisierungen erstellen
+        visual_processed_data_folder = os.path.join('processed_data', 'visual_processed', stroke_type)
         os.makedirs(visual_processed_data_folder, exist_ok=True)
         
-        print(f"\nVerarbeite {stroke_type}: {len(files)} Dateien gefunden")
-        
         for file in files:
-            try:
-                # Daten laden und filtern
-                data = self.load_raw_data(file)
-                
-                if len(data) == 0:
-                    print(f"  {os.path.basename(file)}: Keine Daten gefunden")
-                    continue
-                    
-                filtered_data = self.apply_filters(data)
-                
-                # Schläge erkennen
-                peaks, intensity = self.detect_strokes(filtered_data)
-                
-                # Fenster extrahieren
-                windows = self.extract_stroke_windows(filtered_data, peaks)
-                
-                print(f"  {os.path.basename(file)}: {len(windows)} Schläge erkannt")
-                
-                #visualisiere
-                filename = os.path.basename(file)
-                visualization_path = os.path.join(visual_processed_data_folder, f"{filename}.png")
-                self.visualize_stroke_detection(filtered_data, peaks, intensity, visualization_path)
-                
-                # Features berechnen
-                #for window in windows:
-                for i, window in enumerate(windows):
-                    #Visualisiere window (geschnittene data inkl. Timestamps, Mitte ist ein peak)
-                    window_name = os.path.join(visual_processed_data_folder, f"{filename}_window_{i}.png")
-                    self.visualize_stroke_detection(window, output_file=window_name)
-                    
-                    sensor_data, features = self.calculate_features(window) #Merkmale, sensor_data: window (ohne Timestamps), weitere features: 'max_lin_acc', 'max_gyro'
-                    all_windows.append(sensor_data)
-                    all_features.append(features)
-                    
-            except Exception as e:
-                print(f"  Fehler bei {os.path.basename(file)}: {str(e)}")
+            data = self.load_csv_data(file)
+            
+            if len(data) < self.window_size:
+                print(f"  {os.path.basename(file)}: Zu wenig Daten ({len(data)} Samples)")
                 continue
+            
+            # Einfache Glättung auf Sensordaten
+            for feature in ['gyro_x', 'gyro_y', 'gyro_z', 'lin_acc_x', 'lin_acc_y', 'lin_acc_z']:
+                if feature in data.columns:
+                    data[feature] = self.simple_smooth(data[feature].values)
+            
+            # Peaks finden
+            peaks, intensity = self.find_movement_peaks(data)
+            
+            # Visualisiere die Schlagerkennung
+            filename = os.path.basename(file)
+            visualization_path = os.path.join(visual_processed_data_folder, f"{filename}.png")
+            self.visualize_stroke_detection(data, peaks, intensity, visualization_path)
+            
+            # Fenster extrahieren
+            windows = self.extract_windows_around_peaks(data, peaks)
+            all_windows.extend(windows)
+            
+            # Visualisiere jedes extrahierte Fenster
+            for i, window in enumerate(windows):
+                window_df = pd.DataFrame(window, columns=self.training_features)
+                window_name = os.path.join(visual_processed_data_folder, f"{filename}_window_{i}.png")
+                self.visualize_stroke_detection(window_df, output_file=window_name)
+            
+            print(f"  {os.path.basename(file)}: {len(windows)} Schläge erkannt")
         
-        #all_windows: alle window (geschnittete data (exl.Timestamps), Mitte ist ein peak)
-        #all_features: alle weitere MErkmale(features): 'max_lin_acc', 'max_gyro'
-
+        return all_windows
+    
+    def simple_normalize(self, X):
         """
-        all_windows = [
-            DataFrame1,  # 1. erkannter Schlag (200 Zeilen × 7 Spalten)
-            DataFrame2,  # 2. erkannter Schlag (200 Zeilen × 7 Spalten)
-            DataFrame3,  # 3. erkannter Schlag (200 Zeilen × 7 Spalten)
-            # ... weitere Schläge
-        ]
-
-        # windows[0] könnte so aussehen:
-            timestamp    acc_x    acc_y    acc_z   gyro_x   gyro_y   gyro_z
-        0     1.23       0.1      0.2      9.8      5.2      1.1      0.3
-        1     1.24       0.3      0.4      9.7      8.1      2.2      1.1
-        2     1.25       1.2      2.1      8.9     15.3      5.4      3.2
-        ...   ...        ...      ...      ...      ...      ...      ...
-        199   3.22       0.2      0.1      9.8      2.1      0.8      0.2
+        Einfache Normalisierung - ersetzt sklearn StandardScaler
+        Z-Score Normalisierung: (x - mean) / std
         """
-        return all_windows, all_features 
+        # X hat Form: (n_samples, window_size, n_features)
+        X_reshaped = X.reshape(-1, X.shape[-1])  # Alle Zeitpunkte zusammen
+        
+        # Mittelwert und Standardabweichung berechnen
+        if self.feature_means is None:
+            self.feature_means = np.mean(X_reshaped, axis=0)
+            self.feature_stds = np.std(X_reshaped, axis=0) + 1e-8  # Kleine Zahl um Division durch 0 zu vermeiden
+        
+        # Normalisierung anwenden
+        X_normalized = np.zeros_like(X)
+        for i in range(X.shape[0]):
+            for j in range(X.shape[1]):
+                X_normalized[i, j] = (X[i, j] - self.feature_means) / self.feature_stds
+        
+        return X_normalized
+    
+    def save_normalization_params(self, filename):
+        """Speichert Normalisierungsparameter als JSON"""
+        params = {
+            'means': self.feature_means.tolist(),  # NumPy Array zu Liste
+            'stds': self.feature_stds.tolist(),
+            'features': self.training_features
+        }
+        with open(filename, 'w') as f:
+            json.dump(params, f, indent=2)  # indent für bessere Lesbarkeit
+        print(f"Normalisierungsparameter gespeichert in {filename}")
+    
+    def load_normalization_params(self, filename):
+        """Lädt Normalisierungsparameter aus JSON"""
+        with open(filename, 'r') as f:
+            params = json.load(f)
+        self.feature_means = np.array(params['means'])  # Liste zu NumPy Array
+        self.feature_stds = np.array(params['stds'])
+        return params['features']
     
     def visualize_stroke_detection(self, data, peaks=None, intensity=None, output_file=None):
         """Visualisiert die Schlagerkennung"""
@@ -321,132 +287,137 @@ class TischtennisDataProcessor:
         
         if output_file:
             plt.savefig(output_file)
-            plt.close()  #Schließe Figure um Speicher zu sparen #prevent memory leaks when generating many visualization images
-        #plt.show()
+            plt.close()  # Schließe Figure um Speicher zu sparen
 
-def process_all_data():
-    """Hauptfunktion zur Verarbeitung aller Daten"""
-    processor = TischtennisDataProcessor()
+def process_all_data_minimal():
+    """
+    Hauptfunktion - verarbeitet alle Daten mit minimalen Bibliotheken
+    """
+    processor = MinimalTischtennisProcessor(window_size=100) #modifiziert: Fenstergröße 200
     
-    #Ordner für verarbeitete Rohdaten erstellen falls nicht vorhanden
-    os.makedirs('./processed_data', exist_ok=True)
-    
+    # Schlagtypen definieren
     stroke_types = ['vorhand_topspin', 'vorhand_schupf', 'rueckhand_topspin', 'rueckhand_schupf']
-    label_map = {stroke: idx for idx, stroke in enumerate(stroke_types)}
-    """
-    label_map = {}
-    for idx, stroke in enumerate(stroke_types):
-        label_map[stroke] = idx
     
-    # label_map sieht so aus:
-    label_map = {
-        'vorhand_topspin': 0,
-        'vorhand_schupf': 1,
-        'rueckhand_topspin': 2,
-        'rueckhand_schupf': 3
-    }
-    """
-
     all_data = []
     all_labels = []
     
-    # Verarbeite jeden Schlagtyp
-    for stroke_type in stroke_types:
-        windows, features = processor.process_stroke_type(stroke_type)
+    # Jeder Schlagtyp bekommt eine Nummer als Label
+    for label_num, stroke_type in enumerate(stroke_types):
+        windows = processor.process_one_stroke_type(stroke_type, './rohdaten')
         
-        # Labels hinzufügen
-        labels = [label_map[stroke_type]] * len(windows)
-        """ 
-        labels = [0] * 5    # Beispiel: 5 Schläge => len(windows) = 5 
-        # Ergebnis: labels = [0, 0, 0, 0, 0]
-        """
-        
-        all_data.extend(windows)    #Windows von jedem Schlagart wird hier gesammelt 
-        all_labels.extend(labels)   #Label von alle Daten: 0,1,2,3
+        if windows:
+            all_data.extend(windows)
+            # Label für jeden Schlag dieses Typs
+            all_labels.extend([label_num] * len(windows))
     
-    # In numpy arrays konvertieren
-    if len(all_data) > 0:
-        X = np.array(all_data) 
-        y = np.array(all_labels)
-        
-        print(f"\nGesamtdaten: {X.shape[0]} Schläge")
-        print(f"Form: {X.shape}")
-        print(f"Features: {len(processor.training_features)} - {processor.training_features}")
-        print(f"Klassen: {np.unique(y, return_counts=True)}")
-        
-        # Speichern
-        np.save('./processed_data/X_data.npy', X)
-        np.save('./processed_data/y_labels.npy', y)
-        
-        """ 
-        X hat Form: (n_samples, 200, 10) = (Anzahl Schläge, Zeitschritte, Features)
-        Reshape macht daraus: (n_samples * 200, 10)
-        """
-        # Scaler fit und speichern
-        X_reshaped = X.reshape(-1, X.shape[-1])     # -1 = automatisch berechnen
-        processor.scaler.fit(X_reshaped)            # standard skaliert --> (z-wert normalisiert ?)
-        
-        """ (*)
-        # Vorher: X.shape = (100, 200, 6) für 100 Schläge, je 200 Zeitpunkte (Timestamp), je 6 Sensordaten 
-        # 3D-Array mit 100×200×6 = 120.000 Datenpunkten
-            Was macht X.reshape(-1, X.shape[-1])?
-            1. X.shape[-1] = letzter Wert der Shape = 6 (Anzahl Sensoren)
-            2. X.reshape(-1, 6) formt das 3D-Array in ein 2D-Array um
-                Bsp 1: X.reshape(-1, 6):
-                    # -1 wird automatisch berechnet: 120.000 ÷ 6 = 20.000
-                    # Ergebnis: (20000, 6)
-                Bsp 2: X = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
-                    # X.shape = (12,)
-                    X_reshaped = X.reshape(2, 6)
-                    # Ergebnis: [[1,  2,  3,  4,  5,  6], [7,  8,  9, 10, 11, 12]]
-                    # X_reshaped.shape = (2, 6)
-            3. -1 bedeutet: "Berechne diese Dimension automatisch"
-        # Nachher: X_reshaped.shape = (20000, 6)
-        # 2D-Array mit 20.000 Zeilen × 6 Spalten
-        # (100 Schläge × 200 Zeitpunkte = 20.000 Zeilen)
-            Warum wird das gemacht?
-            Der StandardScaler normalisiert spaltenweise. Er kann nur mit 2D-Arrays arbeiten, wo:
-            Jede Zeile = ein Beobachtung/Messung
-            Jede Spalte = ein Feature/Sensor (acc_x, acc_y, acc_z, gyro_x, gyro_y, gyro_z)
-        """
+    if not all_data:
+        print("Keine Daten gefunden!")
+        return None, None
+    
+    # In numpy arrays umwandeln
+    X = np.array(all_data)  # Form: (n_samples, window_size, n_features)
+    y = np.array(all_labels)  # Form: (n_samples,)
+    
+    print(f"\nErgebnis:")
+    print(f"Anzahl Schläge: {len(X)}")
+    print(f"Datenform: {X.shape}")
+    print(f"Features: {len(processor.training_features)}")
+    print(f"Schlagtypen: {stroke_types}")
+    
+    # Daten normalisieren
+    X_normalized = processor.simple_normalize(X)
+    
+    # Ausgabeordner erstellen
+    output_dir = './processed_data'
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # NumPy Arrays speichern (bleiben als .npy für Effizienz)
+    np.save(f'{output_dir}/X_minimal.npy', X_normalized)
+    np.save(f'{output_dir}/y_minimal.npy', y)
+    
+    # Normalisierungsparameter als JSON speichern
+    processor.save_normalization_params(f'{output_dir}/normalization_minimal.json')
+    
+    # Zusätzliche Info als JSON speichern
+    info = {
+        'stroke_types': stroke_types,
+        'window_size': processor.window_size,
+        'features': processor.training_features,
+        'data_shape': list(X.shape),  # Tuple zu Liste für JSON
+        'num_samples': int(X.shape[0]),
+        'num_features': int(X.shape[2]),
+        'processing_date': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
+    }
+    
+    with open(f'{output_dir}/info_minimal.json', 'w') as f:
+        json.dump(info, f, indent=2)
+    
+    # Zusammenfassung der Klassen als JSON
+    unique_labels, counts = np.unique(y, return_counts=True)
+    class_distribution = {
+        stroke_types[int(label)]: int(count) 
+        for label, count in zip(unique_labels, counts)
+    }
+    
+    summary = {
+        'total_samples': int(len(X)),
+        'class_distribution': class_distribution,
+        'balanced': bool(np.std(counts) < np.mean(counts) * 0.2)  # Prüft ob Klassen ausbalanciert sind
+    }
+    
+    with open(f'{output_dir}/data_summary.json', 'w') as f:
+        json.dump(summary, f, indent=2)
+    
+    print(f"\nDaten gespeichert in {output_dir}/")
+    print("- X_minimal.npy (normalisierte Sensordaten)")
+    print("- y_minimal.npy (Labels)")
+    print("- normalization_minimal.json (Normalisierungsparameter für Features)")
+    print("- info_minimal.json (Zusätzliche Informationen über die Daten)")
+    print("- data_summary.json (Zusammenfassung der Daten und Klassenverteilung)")
+    
+    return X_normalized, y
 
-        with open('./processed_data/scaler.pkl', 'wb') as f:
-            pickle.dump(processor.scaler, f)
+# Einfache Funktion um die Ergebnisse zu prüfen
+def check_processed_data():
+    """Lädt und zeigt verarbeitete Daten"""
+    try:
+        X = np.load('./processed_data/X_minimal.npy')
+        y = np.load('./processed_data/y_minimal.npy')
         
-        # Feature-Namen speichern
-        with open('./processed_data/feature_names.pkl', 'wb') as f:
-            pickle.dump(processor.training_features, f) # Speichert das Dictionary (JSON-Objekte) als Binär in Datei (.pkl oder pickel ooder irgendwas) 
+        # JSON Dateien laden
+        with open('./processed_data/info_minimal.json', 'r') as f:
+            info = json.load(f)
         
-        print("\nDaten gespeichert in processed_data/")
+        with open('./processed_data/data_summary.json', 'r') as f:
+            summary = json.load(f)
         
-        return X, y
-    else:
-        print("\nKeine Daten zum Verarbeiten gefunden!")
-        return np.array([]), np.array([])
+        print("Verarbeitete Daten geladen:")
+        print(f"X Form: {X.shape}")
+        print(f"y Form: {y.shape}")
+        print(f"Schlagtypen: {info['stroke_types']}")
+        print(f"Features: {info['features']}")
+        print(f"\nKlassenverteilung:")
+        for stroke_type, count in summary['class_distribution'].items():
+            print(f"  {stroke_type}: {count} Schläge")
+        print(f"\nDaten ausbalanciert: {'Ja' if summary['balanced'] else 'Nein'}")
+        
+    except FileNotFoundError as e:
+        print(f"Datei nicht gefunden: {e}")
+        print("Noch keine verarbeiteten Daten gefunden. Führen Sie zuerst process_all_data_minimal() aus.")
 
 if __name__ == "__main__":
-    # Beispiel: Einzelne Datei visualisieren
-    processor = TischtennisDataProcessor()
-    
-    """
-    # Teste mit einer Beispieldatei
-    test_files = glob.glob("./rohdaten/vorhand_topspin/*.csv")
-    if test_files:
-        test_file = test_files[0]
-        print(f"Teste mit: {test_file}")
-        try:
-            data = processor.load_raw_data(test_file)
-            filtered = processor.apply_filters(data)
-            peaks, intensity = processor.detect_strokes(filtered)
-            
-            # Ordner für Visualisierungen erstellen
-            os.makedirs('./visualizations', exist_ok=True)
-            
-            processor.visualize_stroke_detection(filtered, peaks, intensity, 
-                                               "./visualizations/stroke_detection_example.png")
-        except Exception as e:
-            print(f"Fehler bei Visualisierung: {e}")
-    """
+    print("=== MINIMALE DATENVERARBEITUNG MIT JSON ===")
+    print("Verwendet: pandas, numpy, json")
+    print("JSON-Dateien sind lesbar und sicher!")
+    print()
     
     # Alle Daten verarbeiten
-    X, y = process_all_data()
+    X, y = process_all_data_minimal()
+    
+    if X is not None:
+        print("\n=== ERFOLGREICH VERARBEITET ===")
+        print("Die Daten sind jetzt bereit für das Training!")
+        print("Öffnen Sie die JSON-Dateien mit einem Texteditor um die Metadaten zu sehen.")
+    else:
+        print("\n=== FEHLER ===")
+        print("Keine Daten konnten verarbeitet werden.")
