@@ -106,8 +106,7 @@ class TischtennisDataProcessor:
         """ Algorithmus v0: einfache Kombination der Magnituden"""   
         """     
         # Kombinierte Bewegungsintensität
-        movement_intensity = acc_magnitude + (gyro_magnitude / 100)
-        #movement_intensity = acc_magnitude + (gyro_magnitude / 100) # 100: Skalierung (empirische Wahl)
+        #movement_intensity = lin_acc_magnitude + (gyro_magnitude / 100) # 100: Skalierung (empirische Wahl)
         
         Der Faktor 100 ist eine empirische Wahl:
             Bringt beide Signale in vergleichbare Größenordnungen
@@ -134,13 +133,13 @@ class TischtennisDataProcessor:
             Data points with very high or very low z-scores (e.g., beyond ±2 or ±3) are often considered outliers. 
         Source: Google Gemini
         """
-        # Normalisierung (Z-Score)
+        # Normalisierung (Z-Wert-Normalisierung)
         lin_acc_norm = (lin_acc_magnitude - lin_acc_magnitude.mean()) / (lin_acc_magnitude.std() + 1e-6)
         gyro_norm = (gyro_magnitude - gyro_magnitude.mean()) / (gyro_magnitude.std() + 1e-6)
         
         # Gewichtete Kombination
-        w_acc = 0.7  # Lineare Beschleunigung ist wichtiger
-        w_gyro = 0.3
+        w_acc = 0.8  # Lineare Beschleunigung ist wichtiger
+        w_gyro = 0.2
         movement_intensity = w_acc * lin_acc_norm + w_gyro * gyro_norm # obere Berechnungen sind zur Ermittlung der Bewegungsintensität 
         
         # Schwellwert basierend auf Standardabweichung
@@ -243,7 +242,7 @@ class TischtennisDataProcessor:
                     window_name = os.path.join(visual_processed_data_folder, f"{filename}_window_{i}.png")
                     self.visualize_stroke_detection(window, output_file=window_name)
                     
-                    sensor_data, features = self.calculate_features(window) #Merkmale, sensor_data: window (ohne Timestamps), wetere features: 'max_lin_acc', 'max_gyro'
+                    sensor_data, features = self.calculate_features(window) #Merkmale, sensor_data: window (ohne Timestamps), weitere features: 'max_lin_acc', 'max_gyro'
                     all_windows.append(sensor_data)
                     all_features.append(features)
                     
@@ -327,7 +326,7 @@ class TischtennisDataProcessor:
 
 def process_all_data():
     """Hauptfunktion zur Verarbeitung aller Daten"""
-    processor = TischtennisDataProcessor(window_size=200, overlap=50)
+    processor = TischtennisDataProcessor()
     
     #Ordner für verarbeitete Rohdaten erstellen falls nicht vorhanden
     os.makedirs('./processed_data', exist_ok=True)
@@ -429,6 +428,7 @@ if __name__ == "__main__":
     # Beispiel: Einzelne Datei visualisieren
     processor = TischtennisDataProcessor()
     
+    """
     # Teste mit einer Beispieldatei
     test_files = glob.glob("./rohdaten/vorhand_topspin/*.csv")
     if test_files:
@@ -446,6 +446,7 @@ if __name__ == "__main__":
                                                "./visualizations/stroke_detection_example.png")
         except Exception as e:
             print(f"Fehler bei Visualisierung: {e}")
+    """
     
     # Alle Daten verarbeiten
     X, y = process_all_data()

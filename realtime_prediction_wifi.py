@@ -250,7 +250,7 @@ class RealtimeWiFiPredictor:
         
         # Bewegung erkannt wenn deutliche Abweichung vom Ruhezustand
         movement_detected = (
-            (lin_acc_max > 1.0 or lin_acc_std > 0.5) and
+            (lin_acc_max > 0.5 or lin_acc_std > 0.15) and
             (gyro_max > 50.0 or gyro_std > 20.0)
         )
         
@@ -261,8 +261,9 @@ class RealtimeWiFiPredictor:
     
     def predict_stroke(self):
         """Thread: Führt Vorhersagen durch wenn genug Daten vorhanden"""
-        confidence_threshold = 0.7
-        cooldown_time = 2.0
+        # Schwellenwerte für bessere Erkennung
+        confidence_threshold = 0.5  # Von 0.7 auf 0.5 reduziert
+        cooldown_time = 0.3  # Von 2.0 auf 0.3 reduziert
         last_prediction_time = 0
         
         # State Machine
@@ -280,13 +281,20 @@ class RealtimeWiFiPredictor:
                 
                 # Bewegungserkennung
                 movement_detected, movement_score, lin_acc_mean = self.detect_movement()
-                
+
+                """
+                # Debug-Ausgabe für Bewegungserkennung
+                if movement_detected:
+                    print(f"\n[DEBUG] Bewegung erkannt! Score: {movement_score:.2f}")
+                """
+
                 # State Machine Logic
                 if state == 'WAITING':
                     if movement_detected:
                         state = 'MOVING'
                         movement_start_time = current_time
                         peak_movement_score = movement_score
+                        #print(f"[DEBUG] Status: MOVING (Score: {movement_score:.2f})")
                         
                 elif state == 'MOVING':
                     peak_movement_score = max(peak_movement_score, movement_score)
@@ -295,10 +303,13 @@ class RealtimeWiFiPredictor:
                         # Bewegung beendet
                         movement_duration = current_time - movement_start_time
                         
-                        if movement_duration > 0.2 and peak_movement_score > 1.5:
+                        # NIEDRIGERE Schwellenwerte
+                        if movement_duration > 0.1 and peak_movement_score > 0.5:
                             state = 'PREDICTING'
+                            #print(f"[DEBUG] Status: PREDICTING (Duration: {movement_duration:.2f}s, Peak: {peak_movement_score:.2f})")
                         else:
                             state = 'WAITING'
+                            #print(f"[DEBUG] Status: WAITING (Bewegung zu kurz/schwach)")
                             
                 elif state == 'PREDICTING':
                     if current_time - last_prediction_time > cooldown_time:
@@ -324,6 +335,9 @@ class RealtimeWiFiPredictor:
                             predicted_class = np.argmax(prediction[0])
                             confidence = np.max(prediction[0])
                             
+                            #print(f"[DEBUG] Vorhersage: {self.class_names[predicted_class]} (Konfidenz: {confidence:.3f})")
+                            
+                            # Zeige auch Vorhersagen mit niedriger Konfidenz
                             if confidence > confidence_threshold:
                                 result = {
                                     'class': self.class_names[predicted_class],
@@ -336,7 +350,11 @@ class RealtimeWiFiPredictor:
                                 
                                 self.prediction_queue.put(result)
                                 last_prediction_time = current_time
-                                
+
+                            """
+                            else:
+                                print(f"[DEBUG] Konfidenz zu niedrig: {confidence:.3f} < {confidence_threshold}")
+                            """    
                         except Exception as e:
                             print(f"Vorhersagefehler: {e}")
                     
@@ -345,6 +363,7 @@ class RealtimeWiFiPredictor:
                 elif state == 'COOLDOWN':
                     if current_time - last_prediction_time > cooldown_time:
                         state = 'WAITING'
+                        #print(f"[DEBUG] Status: WAITING (Cooldown beendet)")
             
             time.sleep(0.01)
     
