@@ -108,40 +108,46 @@ class RealtimeWiFiPyTorchPredictor:
                 except socket.error:
                     continue
                 else:
+                    # OSC Messages dekodieren
                     for message in osc_decoder.decode(data):
-                        # message: [timestamp, address, ...floats]
-                        if len(message) < 2:
-                            continue
-                        address = message[1]
-                        floats = message[2:]
-                        if address == '/sensors' and len(floats) >= 10:
-                            self.current_sensors_data = {
-                                'gyro_x': floats[0],
-                                'gyro_y': floats[1],
-                                'gyro_z': floats[2],
-                                'acc_x': floats[3],
-                                'acc_y': floats[4],
-                                'acc_z': floats[5],
-                                'mag_x': floats[6],
-                                'mag_y': floats[7],
-                                'mag_z': floats[8],
-                                'baro': floats[9]
-                            }
-                        elif address == '/quaternion' and len(floats) >= 4:
-                            self.current_quaternion_data = {
-                                'w': floats[0],
-                                'x': floats[1],
-                                'y': floats[2],
-                                'z': floats[3]
-                            }
-                        elif address == '/linear' and len(floats) >= 3:
-                            self.current_linacc_data = {
-                                'lin_acc_x': floats[0],
-                                'lin_acc_y': floats[1],
-                                'lin_acc_z': floats[2]
-                            }
-                            if self.current_sensors_data and self.current_quaternion_data and self.current_linacc_data:
-                                self.process_complete_data()
+                        if len(message) >= 2:
+                            osc_address = message[1]
+                            
+                            # Sensordaten verarbeiten
+                            if osc_address == '/sensors' and len(message) == 12:
+                                self.current_sensors_data = {
+                                    'gyro_x': message[2],
+                                    'gyro_y': message[3],
+                                    'gyro_z': message[4],
+                                    'acc_x': message[5],
+                                    'acc_y': message[6],
+                                    'acc_z': message[7],
+                                    'mag_x': message[8],
+                                    'mag_y': message[9],
+                                    'mag_z': message[10],
+                                    'baro': message[11]
+                                }
+                                
+                            # Quaternion-Daten
+                            elif osc_address == '/quaternion' and len(message) == 6:
+                                self.current_quaternion_data = {
+                                    'w': message[2],
+                                    'x': message[3],
+                                    'y': message[4],
+                                    'z': message[5]
+                                }
+                                
+                            # Lineare Beschleunigung
+                            elif osc_address == '/linear' and len(message) == 5:
+                                self.current_linacc_data = {
+                                    'lin_acc_x': message[2],
+                                    'lin_acc_y': message[3],
+                                    'lin_acc_z': message[4]
+                                }
+                                
+                                # Wenn alle Daten vorhanden sind, zusammenführen
+                                if self.current_sensors_data and self.current_quaternion_data and self.current_linacc_data:
+                                    self.process_complete_data()
             time.sleep(0.001)
 
     def process_complete_data(self):

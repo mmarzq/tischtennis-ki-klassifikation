@@ -113,7 +113,7 @@ def main():
     model = Tischtennis1DCNN(input_channels=X.shape[1], num_classes=len(class_names), window_size=X.shape[2]).to(device)
     #print("Windowsgröße:", X.shape[2])
     print("Starte Training für 50 Epochen...")
-    train_model(model, train_loader, val_loader, device, epochs=50, lr=0.001)
+    train_model(model, train_loader, val_loader, device, epochs=300, lr=0.001)
     print("Evaluierung auf Testdaten...")
     test_loss, test_acc = evaluate(model, test_loader, device)
     print(f"Test Loss: {test_loss:.4f}, Test Accuracy: {test_acc:.4f}")
