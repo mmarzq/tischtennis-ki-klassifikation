@@ -103,6 +103,19 @@ class TischtennisDataProcessor:
             data['gyro_z']**2
         )
         
+        """ Algorithmus v0: einfache Kombination der Magnituden"""   
+        """     
+        # Kombinierte Bewegungsintensität
+        movement_intensity = acc_magnitude + (gyro_magnitude / 100)
+        #movement_intensity = acc_magnitude + (gyro_magnitude / 100) # 100: Skalierung (empirische Wahl)
+        
+        Der Faktor 100 ist eine empirische Wahl:
+            Bringt beide Signale in vergleichbare Größenordnungen
+            Verhindert, dass die Winkelgeschwindigkeit die Gesamtintensität dominiert
+            Ermöglicht, dass beide Sensortypen zur Schlagerkennung beitragen
+        """
+
+        """ Algorithmus v1: gewichtete Kombination der normalisierten (Z-Wert) Magnituden"""
         """
         A z-score, also known as a standard score, is a statistical measurement that describes 
         the position of a raw score in terms of its distance from the mean, measured in standard deviations. 
@@ -240,6 +253,23 @@ class TischtennisDataProcessor:
         
         #all_windows: alle window (geschnittete data (exl.Timestamps), Mitte ist ein peak)
         #all_features: alle weitere MErkmale(features): 'max_lin_acc', 'max_gyro'
+
+        """
+        all_windows = [
+            DataFrame1,  # 1. erkannter Schlag (200 Zeilen × 7 Spalten)
+            DataFrame2,  # 2. erkannter Schlag (200 Zeilen × 7 Spalten)
+            DataFrame3,  # 3. erkannter Schlag (200 Zeilen × 7 Spalten)
+            # ... weitere Schläge
+        ]
+
+        # windows[0] könnte so aussehen:
+            timestamp    acc_x    acc_y    acc_z   gyro_x   gyro_y   gyro_z
+        0     1.23       0.1      0.2      9.8      5.2      1.1      0.3
+        1     1.24       0.3      0.4      9.7      8.1      2.2      1.1
+        2     1.25       1.2      2.1      8.9     15.3      5.4      3.2
+        ...   ...        ...      ...      ...      ...      ...      ...
+        199   3.22       0.2      0.1      9.8      2.1      0.8      0.2
+        """
         return all_windows, all_features 
     
     def visualize_stroke_detection(self, data, peaks=None, intensity=None, output_file=None):
@@ -304,6 +334,19 @@ def process_all_data():
     
     stroke_types = ['vorhand_topspin', 'vorhand_schupf', 'rueckhand_topspin', 'rueckhand_schupf']
     label_map = {stroke: idx for idx, stroke in enumerate(stroke_types)}
+    """
+    label_map = {}
+    for idx, stroke in enumerate(stroke_types):
+        label_map[stroke] = idx
+    
+    # label_map sieht so aus:
+    label_map = {
+        'vorhand_topspin': 0,
+        'vorhand_schupf': 1,
+        'rueckhand_topspin': 2,
+        'rueckhand_schupf': 3
+    }
+    """
 
     all_data = []
     all_labels = []
@@ -314,6 +357,10 @@ def process_all_data():
         
         # Labels hinzufügen
         labels = [label_map[stroke_type]] * len(windows)
+        """ 
+        labels = [0] * 5    # Beispiel: 5 Schläge => len(windows) = 5 
+        # Ergebnis: labels = [0, 0, 0, 0, 0]
+        """
         
         all_data.extend(windows)    #Windows von jedem Schlagart wird hier gesammelt 
         all_labels.extend(labels)   #Label von alle Daten: 0,1,2,3
@@ -340,6 +387,30 @@ def process_all_data():
         X_reshaped = X.reshape(-1, X.shape[-1])     # -1 = automatisch berechnen
         processor.scaler.fit(X_reshaped)            # standard skaliert --> (z-wert normalisiert ?)
         
+        """ (*)
+        # Vorher: X.shape = (100, 200, 6) für 100 Schläge, je 200 Zeitpunkte (Timestamp), je 6 Sensordaten 
+        # 3D-Array mit 100×200×6 = 120.000 Datenpunkten
+            Was macht X.reshape(-1, X.shape[-1])?
+            1. X.shape[-1] = letzter Wert der Shape = 6 (Anzahl Sensoren)
+            2. X.reshape(-1, 6) formt das 3D-Array in ein 2D-Array um
+                Bsp 1: X.reshape(-1, 6):
+                    # -1 wird automatisch berechnet: 120.000 ÷ 6 = 20.000
+                    # Ergebnis: (20000, 6)
+                Bsp 2: X = np.array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
+                    # X.shape = (12,)
+                    X_reshaped = X.reshape(2, 6)
+                    # Ergebnis: [[1,  2,  3,  4,  5,  6], [7,  8,  9, 10, 11, 12]]
+                    # X_reshaped.shape = (2, 6)
+            3. -1 bedeutet: "Berechne diese Dimension automatisch"
+        # Nachher: X_reshaped.shape = (20000, 6)
+        # 2D-Array mit 20.000 Zeilen × 6 Spalten
+        # (100 Schläge × 200 Zeitpunkte = 20.000 Zeilen)
+            Warum wird das gemacht?
+            Der StandardScaler normalisiert spaltenweise. Er kann nur mit 2D-Arrays arbeiten, wo:
+            Jede Zeile = ein Beobachtung/Messung
+            Jede Spalte = ein Feature/Sensor (acc_x, acc_y, acc_z, gyro_x, gyro_y, gyro_z)
+        """
+
         with open('./processed_data/scaler.pkl', 'wb') as f:
             pickle.dump(processor.scaler, f)
         

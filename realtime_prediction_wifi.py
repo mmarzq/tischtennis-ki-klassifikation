@@ -104,6 +104,9 @@ class RealtimeWiFiPredictor:
                 else:
                     # OSC Messages dekodieren
                     for message in osc_decoder.decode(data):
+                        #print (f"Empfangen: {message}") # Debug-Ausgabe
+
+                        # Prüfe ob es eine gültige OSC Nachricht ist
                         if len(message) >= 2:
                             osc_address = message[1]
                             
@@ -142,6 +145,7 @@ class RealtimeWiFiPredictor:
                                 # Wenn alle Daten vorhanden sind, zusammenführen
                                 if self.current_sensors_data and self.current_quaternion_data and self.current_linacc_data:
                                     self.process_complete_data()
+                        
             
             # Kurze Pause um CPU zu schonen
             time.sleep(0.001)
