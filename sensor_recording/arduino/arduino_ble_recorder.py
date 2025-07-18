@@ -22,10 +22,11 @@ csv_writer = None
 csv_file = None
 line_count = 0
 start_time = None
+first_timestamp = None          # for relative timestamp calculation => 
 
 def handle_data(sender, data):
     """Process incoming Bluetooth data"""
-    global csv_writer, line_count
+    global csv_writer, line_count, first_timestamp
     
     # Convert bytes to text
     text = data.decode('utf-8').strip()
@@ -37,11 +38,31 @@ def handle_data(sender, data):
     # Split data and write to CSV
     values = text.split(',')
     if len(values) == 18:  # Expected number of values
+        """first method: relative to first_timestamp (time from Arduino) """
+        # Convert timestamp to start from 0
+        original_timestamp = int(values[0])
+        
+        # Set first timestamp on first data
+        if first_timestamp is None:
+            first_timestamp = original_timestamp
+        
+        # Calculate relative timestamp in seconds
+        relative_timestamp = (original_timestamp - first_timestamp) / 1000.0
+        values[0] = relative_timestamp   #f"{relative_timestamp:.5f}"
+
+        """second method: timestamp from Python side, first_timestamp is not needed"""
+        """
+        if start_time is None:
+            start_time = time.time()
+        current_timestamp = time.time() - start_time
+        values[0] = f"{current_timestamp:.3f}"
+        """
+
         csv_writer.writerow(values)
         line_count += 1
-        
+
         # Show progress
-        if line_count % 50 == 0:
+        if line_count % 100 == 0:
             time_left = RECORDING_TIME - (time.time() - start_time)
             print(f"Lines: {line_count}, Time left: {time_left:.1f}s")
 
@@ -60,10 +81,13 @@ async def find_nicla():
     return None
 
 async def main():
-    global csv_writer, csv_file, start_time
+    global csv_writer, csv_file, start_time, first_timestamp
     
     print("Arduino Nicla Bluetooth CSV Logger")
     print("-" * 30)
+    
+    # Reset first timestamp for each recording
+    first_timestamp = None
     
     # Find device
     device = await find_nicla()
@@ -88,7 +112,7 @@ async def main():
         csv_writer.writerow(['Timestamp', 'Gyro_X', 'Gyro_Y', 'Gyro_Z', 
                            'Acc_X', 'Acc_Y', 'Acc_Z', 
                            'Mag_X', 'Mag_Y', 'Mag_Z', 
-                           'Pressure', 
+                           'Bar', 
                            'Quat_W', 'Quat_X', 'Quat_Y', 'Quat_Z',
                            'Lin_Acc_X', 'Lin_Acc_Y', 'Lin_Acc_Z'])
         

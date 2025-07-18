@@ -55,9 +55,11 @@ void setup() {
     connected = true;
     nicla::leds.setColor(blue);
     
+    """
     // Send header
     String header = "Timestamp,Gyro_X,Gyro_Y,Gyro_Z,Acc_X,Acc_Y,Acc_Z,Mag_X,Mag_Y,Mag_Z,Pressure,Quat_W,Quat_X,Quat_Y,Quat_Z,Lin_Acc_X,Lin_Acc_Y,Lin_Acc_Z\n";
     txChar.writeValue(header.c_str());
+    """
   });
   
   BLE.setEventHandler(BLEDisconnected, [](BLEDevice central) {
@@ -82,6 +84,7 @@ void loop() {
       // Update sensors
       BHY2.update();
       
+      """
       // Build CSV line
       String data = String(millis()) + "," +
                    gyro.x() + "," + gyro.y() + "," + gyro.z() + "," +
@@ -90,6 +93,17 @@ void loop() {
                    pressure.value() + "," +
                    quat.w() + "," + quat.x() + "," + quat.y() + "," + quat.z() + "," +
                    linAccel.x() + "," + linAccel.y() + "," + linAccel.z() + "\n";
+      """
+
+      // Build CSV line with 4 decimal places
+      String data = String(millis()) + "," +
+                   String(gyro.x(), 4) + "," + String(gyro.y(), 4) + "," + String(gyro.z(), 4) + "," +
+                   String(accel.x(), 4) + "," + String(accel.y(), 4) + "," + String(accel.z(), 4) + "," +
+                   String(mag.x(), 4) + "," + String(mag.y(), 4) + "," + String(mag.z(), 4) + "," +
+                   String(pressure.value(), 4) + "," +
+                   String(quat.w(), 4) + "," + String(quat.x(), 4) + "," + String(quat.y(), 4) + "," + String(quat.z(), 4) + "," +
+                   String(linAccel.x(), 4) + "," + String(linAccel.y(), 4) + "," + String(linAccel.z(), 4) + "\n";
+      
       
       // Send over Bluetooth
       txChar.writeValue(data.c_str());
