@@ -10,14 +10,21 @@ scikit-learn>=1.4.0             # scikit-learn==1.3.0 Scikit-learn 1.3.0 muss be
 tensorflow>=2.16.0,<2.19.0      # tensorflow unterstützt im Moment nur python 3.8 und 3.12
 torch
 
-pyserial==3.5                   # For Arduino serial communication
+# For Arduino serial communication
+pyserial
+bleak>=0.20.0                   # Bleak: Bibliothek für Bluetooth Low Energy (BLE) Kommunikation  
+
+# Alternative: Alte Bluetooth-Bibliotheken (oft problematisch)
+# pybluez        # Funktioniert oft nicht auf Windows
+# pybluez-win10  # Windows-spezifisch, aber veraltet
+
 
 # Optional for advanced features
 jupyter==1.0.0
 plotly==5.15.0
 
 # For NGIMU communication
-python-osc==1.8.3
+#python-osc==1.8.3
 
 # for other python   
-conda install numpy scipy pandas matplotlib seaborn scikit-learn tensorflow
+#conda install numpy scipy pandas matplotlib seaborn scikit-learn tensorflow
