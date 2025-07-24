@@ -68,12 +68,7 @@ void setup() {
   BLE.setEventHandler(BLEConnected, [](BLEDevice central) {
     connected = true;
     nicla::leds.setColor(blue);
-    
-    /*
-    // Send header
-    String header = "Timestamp,Gyro_X,Gyro_Y,Gyro_Z,Acc_X,Acc_Y,Acc_Z,Mag_X,Mag_Y,Mag_Z,Pressure,Quat_W,Quat_X,Quat_Y,Quat_Z,Lin_Acc_X,Lin_Acc_Y,Lin_Acc_Z\n";
-    txChar.writeValue(header.c_str());
-    */
+    // Serial.println("Connected to central: " + central.address());
   });
   
   BLE.setEventHandler(BLEDisconnected, [](BLEDevice central) {
@@ -89,39 +84,34 @@ void loop() {
   BLEDevice central = BLE.central();
   
   if (central && central.connected()) {
-    static unsigned long lastRead = 0;
+    // Update sensors
+    BHY2.update();
     
-    // Send data every 20ms (50Hz)
-    if (millis() - lastRead >= 20) {
-      lastRead = millis();
-      
-      // Update sensors
-      BHY2.update();
-      
-      // Convert sensor values to proper units
-      float gyro_x_dps = gyro.x() * GYRO_SCALE;
-      float gyro_y_dps = gyro.y() * GYRO_SCALE;
-      float gyro_z_dps = gyro.z() * GYRO_SCALE;
-      
-      float accel_x_g = accel.x() * ACCEL_SCALE;
-      float accel_y_g = accel.y() * ACCEL_SCALE;
-      float accel_z_g = accel.z() * ACCEL_SCALE;
-      
-      float lin_acc_x_g = linAccel.x() * ACCEL_SCALE;
-      float lin_acc_y_g = linAccel.y() * ACCEL_SCALE;
-      float lin_acc_z_g = linAccel.z() * ACCEL_SCALE;
-      
-      // Build CSV line with converted values
-      String data = String(millis()) + "," +
-                   gyro_x_dps + "," + gyro_y_dps + "," + gyro_z_dps + "," +
-                   accel_x_g + "," + accel_y_g + "," + accel_z_g + "," +
-                   mag.x() + "," + mag.y() + "," + mag.z() + "," +
-                   pressure.value() + "," +
-                   quat.w() + "," + quat.x() + "," + quat.y() + "," + quat.z() + "," +
-                   lin_acc_x_g + "," + lin_acc_y_g + "," + lin_acc_z_g + "\n";
+    // Convert sensor values to proper units
+    float gyro_x_dps = gyro.x() * GYRO_SCALE;
+    float gyro_y_dps = gyro.y() * GYRO_SCALE;
+    float gyro_z_dps = gyro.z() * GYRO_SCALE;
+    
+    float accel_x_g = accel.x() * ACCEL_SCALE;
+    float accel_y_g = accel.y() * ACCEL_SCALE;
+    float accel_z_g = accel.z() * ACCEL_SCALE;
+    
+    float lin_acc_x_g = linAccel.x() * ACCEL_SCALE;
+    float lin_acc_y_g = linAccel.y() * ACCEL_SCALE;
+    float lin_acc_z_g = linAccel.z() * ACCEL_SCALE;
+    
+    // Build CSV line with converted values
+    String data = String(millis()) + "," +
+                  gyro_x_dps + "," + gyro_y_dps + "," + gyro_z_dps + "," +
+                  accel_x_g + "," + accel_y_g + "," + accel_z_g + "," +
+                  mag.x() + "," + mag.y() + "," + mag.z() + "," +
+                  pressure.value() + "," +
+                  quat.w() + "," + quat.x() + "," + quat.y() + "," + quat.z() + "," +
+                  lin_acc_x_g + "," + lin_acc_y_g + "," + lin_acc_z_g + "\n";
 
-      // Send over Bluetooth
-      txChar.writeValue(data.c_str());
-    }
+    // Send over Bluetooth
+    txChar.writeValue(data.c_str());
+
+    delay(10);    // 10ms = 100Hz Sample Rate
   }
 }
