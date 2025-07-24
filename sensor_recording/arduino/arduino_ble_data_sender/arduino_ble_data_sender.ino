@@ -11,7 +11,7 @@ Target: 50Hz data rate
 // Nordic UART Service
 BLEService uartService("6E400001-B5A3-F393-E0A9-E50E24DCCA9E");
 BLECharacteristic rxChar("6E400002-B5A3-F393-E0A9-E50E24DCCA9E", BLEWrite, 20);
-BLECharacteristic txChar("6E400003-B5A3-F393-E0A9-E50E24DCCA9E", BLENotify, 512); // Increased size for batch sending
+BLECharacteristic txChar("6E400003-B5A3-F393-E0A9-E50E24DCCA9E", BLENotify, 128); // BLE Paketgröße, 128 Byte für max 128 Charakter, 20 Byte wird 120 Charakter als 6 Pakete gesendet (uneffizient)
 
 // Sensors
 SensorXYZ gyroscope(SENSOR_ID_GYRO);
@@ -30,10 +30,6 @@ bool deviceConnected = false;
 unsigned long lastSensorRead = 0;
 const unsigned long SENSOR_INTERVAL = 20; // 20ms = 50Hz
 
-// Buffer for batch sending
-String dataBuffer = "";
-int bufferCount = 0;
-const int BATCH_SIZE = 5; // Send 5 samples at once
 
 void blePeripheralConnectHandler(BLEDevice central) {
   deviceConnected = true;
@@ -45,8 +41,6 @@ void blePeripheralDisconnectHandler(BLEDevice central) {
   deviceConnected = false;
   nicla::leds.setColor(green);
   Serial.println("Disconnected");
-  dataBuffer = ""; // Clear buffer
-  bufferCount = 0;
 }
 
 void setup() {
@@ -79,8 +73,8 @@ void setup() {
   }
   
   // Configure BLE for speed
-  BLE.setConnectionInterval(6, 16); // 7.5ms - 20ms (min, max in units of 1.25ms)
-  BLE.setLocalName("NiclaSenseME-CSV");
+  //BLE.setConnectionInterval(6, 16); // 7.5ms - 20ms (min, max in units of 1.25ms)
+  BLE.setLocalName("NiclaSenseME");
   BLE.setAdvertisedService(uartService);
   
   uartService.addCharacteristic(rxChar);
@@ -92,16 +86,12 @@ void setup() {
   
   BLE.advertise();
   nicla::leds.setColor(green);
-  
-  Serial.println("Ready - 50Hz mode");
 }
 
 void loop() {
   BLEDevice central = BLE.central();
   
   if (central && central.connected()) {
-    unsigned long currentTime = millis();
-
     // Sensordaten aktualisieren
     BHY2.update();
     
@@ -149,14 +139,13 @@ void loop() {
     // Daten über Bluetooth senden
     txChar.writeValue(csvLine.c_str());
 
-    delay(10); 
+    delay(5); 
 
   } else {
     // Blink when not connected
-    static unsigned long lastBlink = 0;
-    if (millis() - lastBlink > 1000) {
-      lastBlink = millis();
-      //nicla::leds.setColor(nicla::leds.color() == green ? off : green);
-    }
+    nicla::leds.setColor(green);
+    delay(1000);
+    nicla::leds.setColor(off);
+    delay(1000);
   }
 }
