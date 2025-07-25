@@ -210,8 +210,8 @@ def load_and_prepare_data():
 def main():
     """Haupttraining"""
     # Klassen definieren
-    class_names = ['Vorhand Topspin', 'Vorhand Schupf', 
-                   'Rückhand Topspin', 'Rückhand Schupf']
+    class_names = ['Vorhand Topspin', 'Vorhand Schupf', 'Vorhand Block',
+                   'Rückhand Topspin', 'Rückhand Schupf', 'Rückhand Block']
     
     # Ordner erstellen
     os.makedirs('models', exist_ok=True)
@@ -222,7 +222,7 @@ def main():
     
     # Modell erstellen
     input_shape = (X_train.shape[1], X_train.shape[2])  # (timesteps, features)
-    cnn = TischtennisCNN(input_shape, num_classes=4)
+    cnn = TischtennisCNN(input_shape, num_classes=6)
     
     # Modell bauen
     model = cnn.build_model()
@@ -247,7 +247,7 @@ def main():
     # Modell-Informationen speichern
     model_info = {
         'input_shape': input_shape,
-        'num_classes': 4,
+        'num_classes': 6,
         'num_features': X_train.shape[2],
         'class_names': class_names,
         'test_accuracy': test_acc
