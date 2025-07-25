@@ -32,7 +32,7 @@ class RealtimeWiFiPredictor:
                 self.feature_names = self.model_info.get('feature_names', [])
                 self.num_features = self.model_info.get('num_features', 10)
         except:
-            self.class_names = ['Vorhand Topspin', 'Vorhand Schupf', 'Rückhand Topspin', 'Rückhand Schupf']
+            self.class_names = ['Vorhand Topspin', 'Vorhand Schupf', 'Vorhand Block', 'Rückhand Topspin', 'Rückhand Schupf', 'Rückhand Block']
             self.feature_names = ['gyro_x', 'gyro_y', 'gyro_z', 'lin_acc_x', 'lin_acc_y', 'lin_acc_z',
                                  'quat_w', 'quat_x', 'quat_y', 'quat_z']
             self.num_features = 10

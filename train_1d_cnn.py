@@ -15,7 +15,7 @@ import pickle
 import os
 
 class TischtennisCNN:
-    def __init__(self, input_shape, num_classes=4):
+    def __init__(self, input_shape, num_classes=6):
         self.input_shape = input_shape
         self.num_classes = num_classes
         self.model = None

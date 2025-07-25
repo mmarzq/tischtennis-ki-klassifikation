@@ -1,83 +1,29 @@
+#!/usr/bin/env python3
 """
-Setup-Skript für das Tischtennis-KI Projekt
-Erstellt die notwendige Umgebung und überprüft die Installation
+Setup für 6-Klassen Tischtennisschlag-Klassifikation
 """
 
 import os
-import sys
-import subprocess
 
-def create_virtual_env():
-    """Erstellt eine virtuelle Python-Umgebung"""
-    print("Erstelle virtuelle Umgebung...")
-    subprocess.run([sys.executable, "-m", "venv", "venv"])
-    print("✓ Virtuelle Umgebung erstellt")
+def setup():
+    """Erstellt alle notwendigen Ordner"""
     
-    # Aktivierungsbefehl anzeigen
-    if sys.platform == "win32":
-        activate = "venv\\Scripts\\activate"
-    else:
-        activate = "source venv/bin/activate"
-    
-    print(f"\nBitte aktivieren Sie die Umgebung mit:")
-    print(f"  {activate}")
-    print("\nDann installieren Sie die Abhängigkeiten mit:")
-    print("  pip install -r requirements.txt")
-
-def check_directories():
-    """Überprüft ob alle notwendigen Ordner existieren"""
-    required_dirs = [
-        'rohdaten/vorhand_topspin',
-        'rohdaten/vorhand_schupf',
-        'rohdaten/rueckhand_topspin',
-        'rohdaten/rueckhand_schupf',
-        'processed_data',
-        'models',
-        'visualizations',
-        'sensor_recording'
+    # Datenordner für 6 Schlagtypen
+    stroke_types = [
+        'vorhand_topspin', 'vorhand_schupf', 'vorhand_block',
+        'rueckhand_topspin', 'rueckhand_schupf', 'rueckhand_block'
     ]
     
-    print("\nÜberprüfe Ordnerstruktur...")
-    all_exist = True
+    # Alle Ordner erstellen
+    folders = (
+        ['rohdaten/' + s for s in stroke_types] +
+        ['models', 'processed_data', 'visualizations']
+    )
     
-    for dir_path in required_dirs:
-        if os.path.exists(dir_path):
-            print(f"✓ {dir_path}")
-        else:
-            print(f"✗ {dir_path} fehlt!")
-            all_exist = False
+    for folder in folders:
+        os.makedirs(folder, exist_ok=True)
     
-    if all_exist:
-        print("\n✓ Alle Ordner vorhanden!")
-    else:
-        print("\n✗ Einige Ordner fehlen. Bitte Projektstruktur überprüfen.")
-
-def main():
-    print("=== Tischtennis-KI Projekt Setup ===\n")
-    
-    # Python Version prüfen
-    print(f"Python Version: {sys.version}")
-    if sys.version_info < (3, 8):
-        print("⚠️  Warnung: Python 3.8 oder höher wird empfohlen!")
-    
-    # Ordnerstruktur prüfen
-    check_directories()
-    
-    # Virtuelle Umgebung anbieten
-    if not os.path.exists('venv'):
-        print("\nKeine virtuelle Umgebung gefunden.")
-        response = input("Möchten Sie eine erstellen? (j/n): ")
-        if response.lower() == 'j':
-            create_virtual_env()
-    else:
-        print("\n✓ Virtuelle Umgebung existiert bereits")
-    
-    print("\n=== Nächste Schritte ===")
-    print("1. Virtuelle Umgebung aktivieren")
-    print("2. Abhängigkeiten installieren: pip install -r requirements.txt")
-    print("3. Arduino-Sketch hochladen")
-    print("4. Test ausführen: python test_installation.py")
-    print("5. Mit Datenerfassung beginnen!")
+    print("Setup abgeschlossen - 6 Schlagtypen bereit")
 
 if __name__ == "__main__":
-    main()
+    setup()

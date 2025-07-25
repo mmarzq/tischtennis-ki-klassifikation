@@ -186,8 +186,10 @@ if __name__ == "__main__":
     stroke_types = {
         '1': 'vorhand_topspin',
         '2': 'vorhand_schupf',
-        '3': 'rueckhand_topspin',
-        '4': 'rueckhand_schupf'
+        '3': 'vorhand_block',
+        '4': 'rueckhand_topspin',
+        '5': 'rueckhand_schupf',
+        '6': 'rueckhand_block'
     }
     
     base_folder = "../../rohdaten"
@@ -196,8 +198,10 @@ if __name__ == "__main__":
         print("\n=== XIO NGIMU Tischtennisschlag Aufnahme ===")
         print("1: Vorhand Topspin")
         print("2: Vorhand Schupf")
-        print("3: Rückhand Topspin")
-        print("4: Rückhand Schupf")
+        print("3: Vorhand Block")
+        print("4: Rückhand Topspin")
+        print("5: Rückhand Schupf")
+        print("6: Rückhand Block")
         print("q: Beenden")
         
         choice = input("\nWählen Sie eine Option: ")

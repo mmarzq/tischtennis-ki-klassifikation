@@ -331,7 +331,7 @@ def process_all_data():
     #Ordner für verarbeitete Rohdaten erstellen falls nicht vorhanden
     os.makedirs('./processed_data', exist_ok=True)
     
-    stroke_types = ['vorhand_topspin', 'vorhand_schupf', 'rueckhand_topspin', 'rueckhand_schupf']
+    stroke_types = ['vorhand_topspin', 'vorhand_schupf', 'vorhand_block', 'rueckhand_topspin', 'rueckhand_schupf', 'rueckhand_block']
     label_map = {stroke: idx for idx, stroke in enumerate(stroke_types)}
     """
     label_map = {}
@@ -342,8 +342,10 @@ def process_all_data():
     label_map = {
         'vorhand_topspin': 0,
         'vorhand_schupf': 1,
-        'rueckhand_topspin': 2,
-        'rueckhand_schupf': 3
+        'vorhand_block': 2,
+        'rueckhand_topspin': 3,
+        'rueckhand_schupf': 4,
+        'rueckhand_block': 5
     }
     """
 
