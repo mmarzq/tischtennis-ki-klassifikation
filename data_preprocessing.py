@@ -14,7 +14,7 @@ from sklearn.preprocessing import StandardScaler
 import pickle
 
 class TischtennisDataProcessor:
-    def __init__(self, window_size=200, overlap=50):
+    def __init__(self, window_size=150, overlap=50):
         self.window_size = window_size  # 200 samples @ 100Hz = 2 Sekunden
         self.overlap = overlap
         self.scaler = StandardScaler()
@@ -149,7 +149,7 @@ class TischtennisDataProcessor:
         peaks, properties = find_peaks(
             movement_intensity, 
             height=threshold,
-            distance=50,  # Mindestabstand zwischen Schlägen (0.5s @ 100Hz)
+            distance= self.overlap,  # Mindestabstand zwischen Schlägen (0.5s @ 100Hz)
             prominence=threshold/2
         )
         
@@ -169,6 +169,7 @@ class TischtennisDataProcessor:
                 window = data.iloc[start:end].copy()
                 window.reset_index(drop=True, inplace=True)
                 windows.append(window)
+                #break  # Nur das erste vollständige Fenster nehmen
         
         return windows
     
@@ -230,17 +231,19 @@ class TischtennisDataProcessor:
                 
                 print(f"  {os.path.basename(file)}: {len(windows)} Schläge erkannt")
                 
-                #visualisiere
+                # Visualisiere nur wenn nicht vorhanden
                 filename = os.path.basename(file)
                 visualization_path = os.path.join(visual_processed_data_folder, f"{filename}.png")
-                self.visualize_stroke_detection(filtered_data, peaks, intensity, visualization_path)
+                if not os.path.exists(visualization_path):
+                    self.visualize_stroke_detection(filtered_data, peaks, intensity, visualization_path)
                 
                 # Features berechnen
                 #for window in windows:
                 for i, window in enumerate(windows):
                     #Visualisiere window (geschnittene data inkl. Timestamps, Mitte ist ein peak)
                     window_name = os.path.join(visual_processed_data_folder, f"{filename}_window_{i}.png")
-                    self.visualize_stroke_detection(window, output_file=window_name)
+                    if not os.path.exists(window_name):
+                        self.visualize_stroke_detection(window, output_file=window_name)
                     
                     sensor_data, features = self.calculate_features(window) #Merkmale, sensor_data: window (ohne Timestamps), weitere features: 'max_lin_acc', 'max_gyro'
                     all_windows.append(sensor_data)
@@ -268,6 +271,8 @@ class TischtennisDataProcessor:
         2     1.25       1.2      2.1      8.9     15.3      5.4      3.2
         ...   ...        ...      ...      ...      ...      ...      ...
         199   3.22       0.2      0.1      9.8      2.1      0.8      0.2
+
+        # sensor_data Spalten (10): gyro_x, gyro_y, gyro_z, lin_acc_x, lin_acc_y, lin_acc_z, quat_w, quat_x, quat_y, quat_z
         """
         return all_windows, all_features 
     
